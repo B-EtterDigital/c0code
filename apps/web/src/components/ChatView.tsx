@@ -198,6 +198,8 @@ import { PullRequestDetailPanel } from "./pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs } from "./RightPanelTabs";
+import { C0xModuleSurface } from "./c0x/C0xModuleSurface";
+import { registerC0xModuleOpener } from "~/c0x/nativeShell";
 import { AgentsPanel } from "./AgentsPanel";
 import {
   deriveAgentPanelModel,
@@ -4112,6 +4114,17 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
   }, [activeThreadRef]);
+  // C0X patch: C0VIBE modules open as peer surfaces of Diff/Files/Agents.
+  const openC0xModuleSurface = useCallback(
+    (moduleId: string) => {
+      if (!activeThreadRef) return;
+      useRightPanelStore.getState().openC0xModule(activeThreadRef, moduleId);
+    },
+    [activeThreadRef],
+  );
+  // The shell drives module opens (shortcuts, rail triggers) through the
+  // registered hook — this view owns the thread ref the surface needs.
+  useEffect(() => registerC0xModuleOpener(openC0xModuleSurface), [openC0xModuleSurface]);
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
@@ -4538,6 +4551,13 @@ export default function ChatView(props: ChatViewProps) {
       closeAfterAgentBrowserConfirmation,
       finishRightPanelSurfaceClose,
     ],
+  );
+  const moveRightPanelSurface = useCallback(
+    (surface: RightPanelSurface, toIndex: number) => {
+      if (!activeThreadRef) return;
+      useRightPanelStore.getState().moveSurface(activeThreadRef, surface.id, toIndex);
+    },
+    [activeThreadRef],
   );
   const closeOtherRightPanelSurfaces = useCallback(
     (surface: RightPanelSurface) => {
@@ -8001,6 +8021,10 @@ export default function ChatView(props: ChatViewProps) {
         }
         composerDraftTarget={composerDraftTarget}
       />
+    ) : renderedRightPanelSurface?.kind === "c0x-module" ? (
+      // C0X patch: a measurable host node — the C0VIBE shell projects the
+      // module UI onto this surface's rect.
+      <C0xModuleSurface moduleId={renderedRightPanelSurface.moduleId} />
     ) : renderedRightPanelSurface?.kind === "agents" ? (
       <AgentsPanel
         model={agentPanelModel}
@@ -8545,6 +8569,7 @@ export default function ChatView(props: ChatViewProps) {
           previewRuntimeTabId={resolvePreviewRuntimeTabId}
           terminalLabelsById={activeTerminalLabelsById}
           onActivate={activateRightPanelSurface}
+          onMoveSurface={moveRightPanelSurface}
           onCloseSurface={closeRightPanelSurface}
           onCloseOtherSurfaces={closeOtherRightPanelSurfaces}
           onCloseSurfacesToRight={closeRightPanelSurfacesToRight}
@@ -8557,6 +8582,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddFiles={addFilesSurface}
           onAddPullRequest={addPullRequestSurface}
           onAddAgents={addAgentsSurface}
+          onOpenC0xModule={openC0xModuleSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
           diffAvailable={isServerThread && isGitRepo}
@@ -8595,6 +8621,7 @@ export default function ChatView(props: ChatViewProps) {
             previewRuntimeTabId={resolvePreviewRuntimeTabId}
             terminalLabelsById={activeTerminalLabelsById}
             onActivate={activateRightPanelSurface}
+            onMoveSurface={moveRightPanelSurface}
             onCloseSurface={closeRightPanelSurface}
             onCloseOtherSurfaces={closeOtherRightPanelSurfaces}
             onCloseSurfacesToRight={closeRightPanelSurfacesToRight}
@@ -8607,6 +8634,7 @@ export default function ChatView(props: ChatViewProps) {
             onAddFiles={addFilesSurface}
             onAddPullRequest={addPullRequestSurface}
             onAddAgents={addAgentsSurface}
+            onOpenC0xModule={openC0xModuleSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}

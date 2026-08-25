@@ -19,14 +19,18 @@ import {
   TerminalSquare,
   Volume2,
   VolumeOff,
+  type LucideIcon,
 } from "lucide-react";
 import {
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -43,6 +47,7 @@ import {
   Menu,
   MenuItem,
   MenuPopup,
+  MenuSeparator,
   MenuShortcut,
   MenuSub,
   MenuSubPopup,
@@ -63,6 +68,10 @@ import { FaviconImage } from "./preview/PreviewFaviconIcon";
 import { previewBridge } from "./preview/previewBridge";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
+// C0X patch: C0VIBE modules and SMARCH controls join the panel natively.
+import { c0xModuleById, useC0xShellConfig } from "~/c0x/nativeShell";
+import { C0xSmarchSection } from "./c0x/C0xSmarchSection";
+import { c0xModuleIcon } from "./c0x/c0xModuleIcons";
 
 interface RightPanelTabsProps {
   mode: PreviewPanelMode;
@@ -88,6 +97,7 @@ interface RightPanelTabsProps {
   previewRuntimeTabId?: ((tabId: string) => string) | undefined;
   terminalLabelsById: ReadonlyMap<string, string>;
   onActivate: (surface: RightPanelSurface) => void;
+  onMoveSurface?: (surface: RightPanelSurface, toIndex: number) => void;
   onCloseSurface: (surface: RightPanelSurface) => void;
   onCloseOtherSurfaces: (surface: RightPanelSurface) => void;
   onCloseSurfacesToRight: (surface: RightPanelSurface) => void;
@@ -105,6 +115,12 @@ interface RightPanelTabsProps {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
+  /**
+   * C0X patch: open one C0VIBE module (from the shell-pushed registry).
+   * Optional — surfaces without a thread scope (the pull-request list's
+   * shared panel) leave it out and the module entries stay hidden there.
+   */
+  onOpenC0xModule?: (moduleId: string) => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -167,6 +183,8 @@ const SURFACE_UNAVAILABLE_HINTS = {
 type TabContextMenuAction =
   | "copy-path"
   | "toggle-mute"
+  | "move-left"
+  | "move-right"
   | "close"
   | "close-others"
   | "close-to-right"
@@ -252,6 +270,126 @@ export function surfaceShortcutTargetsTypingContext(
   );
 }
 
+export const TAB_DRAG_THRESHOLD_PX = 4;
+
+export interface TabDragRect {
+  id: string;
+  left: number;
+  right: number;
+  width: number;
+}
+
+export interface TabDragState {
+  pointerId: number;
+  surfaceId: string;
+  startX: number;
+  startY: number;
+  pointerX: number;
+  pointerY: number;
+  fromIndex: number;
+  toIndex: number;
+  dragging: boolean;
+  settling: boolean;
+  rects: readonly TabDragRect[];
+}
+
+function dragTargetIndex(drag: TabDragState): number {
+  const draggedRect = drag.rects[drag.fromIndex];
+  if (!draggedRect) return drag.fromIndex;
+  const draggedCenter = draggedRect.left + draggedRect.width / 2 + drag.pointerX - drag.startX;
+  let targetIndex = 0;
+  for (const [index, rect] of drag.rects.entries()) {
+    if (draggedCenter >= (rect.left + rect.right) / 2) targetIndex = index;
+  }
+  return targetIndex;
+}
+
+export function updateTabDragPointer(
+  current: TabDragState,
+  pointerX: number,
+  pointerY: number,
+): TabDragState {
+  const dragging =
+    current.dragging ||
+    Math.hypot(pointerX - current.startX, pointerY - current.startY) >= TAB_DRAG_THRESHOLD_PX;
+  const next = { ...current, pointerX, pointerY, dragging };
+  return { ...next, toIndex: dragging ? dragTargetIndex(next) : next.fromIndex };
+}
+
+export type TabPointerRelease =
+  | { kind: "activate"; drag: TabDragState }
+  | { kind: "move"; drag: TabDragState; toIndex: number };
+
+export function resolveTabPointerRelease(
+  current: TabDragState,
+  pointerX: number,
+  pointerY: number,
+): TabPointerRelease {
+  const drag = updateTabDragPointer(current, pointerX, pointerY);
+  return drag.dragging ? { kind: "move", drag, toIndex: drag.toIndex } : { kind: "activate", drag };
+}
+
+export function keyboardTabMoveIndex(
+  key: string,
+  altKey: boolean,
+  surfaceIndex: number,
+  surfaceCount: number,
+): number | null {
+  if (!altKey || (key !== "ArrowLeft" && key !== "ArrowRight")) return null;
+  const toIndex = surfaceIndex + (key === "ArrowLeft" ? -1 : 1);
+  return toIndex >= 0 && toIndex < surfaceCount ? toIndex : null;
+}
+
+function tabDragTransform(surfaceId: string, drag: TabDragState | null): number {
+  if (!drag) return 0;
+  const originalIndex = drag.rects.findIndex((rect) => rect.id === surfaceId);
+  const draggedRect = drag.rects[drag.fromIndex];
+  if (originalIndex < 0 || !draggedRect) return 0;
+  if (surfaceId === drag.surfaceId) {
+    if (!drag.settling) return drag.pointerX - drag.startX;
+    const targetRect = drag.rects[drag.toIndex];
+    if (!targetRect) return 0;
+    return drag.toIndex > drag.fromIndex
+      ? targetRect.right - draggedRect.right
+      : targetRect.left - draggedRect.left;
+  }
+  const gap = Math.max(0, (drag.rects[1]?.left ?? draggedRect.right) - drag.rects[0]!.right);
+  const shift = draggedRect.width + gap;
+  if (
+    drag.toIndex > drag.fromIndex &&
+    originalIndex > drag.fromIndex &&
+    originalIndex <= drag.toIndex
+  ) {
+    return -shift;
+  }
+  if (
+    drag.toIndex < drag.fromIndex &&
+    originalIndex >= drag.toIndex &&
+    originalIndex < drag.fromIndex
+  ) {
+    return shift;
+  }
+  return 0;
+}
+
+/**
+ * C0X patch: the launcher's card shape, widened from the `as const` surface
+ * array so shell-pushed C0VIBE modules can join the same grid grammar.
+ * Modules carry no letter shortcut (the surface letters are taken).
+ */
+interface LauncherAction {
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  shortcut: string;
+  available: boolean;
+  disabledReason: string;
+  onClick: () => void;
+  badgeCount: number;
+  /** C0X modules replace their duplicate glyph + title with this wordmark. */
+  mark: string | null;
+}
+
 function DisabledReasonTooltip(props: { reason: string; trigger: ReactElement }) {
   return (
     <Tooltip>
@@ -299,6 +437,7 @@ function RightPanelEmptyState(props: {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
+  onOpenC0xModule: ((moduleId: string) => void) | null;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -320,6 +459,7 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.browser,
       onClick: props.onAddBrowser,
       badgeCount: 0,
+      mark: null,
     },
     {
       label: "Terminal",
@@ -330,6 +470,7 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.terminal,
       onClick: props.onAddTerminal,
       badgeCount: 0,
+      mark: null,
     },
     {
       label: "Files",
@@ -340,6 +481,7 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.files,
       onClick: props.onAddFiles,
       badgeCount: 0,
+      mark: null,
     },
     {
       label: "Diff",
@@ -350,6 +492,7 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.diff,
       onClick: props.onAddDiff,
       badgeCount: 0,
+      mark: null,
     },
     {
       label: "Pull request",
@@ -360,6 +503,7 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequest,
       onClick: props.onAddPullRequest,
       badgeCount: 0,
+      mark: null,
     },
     {
       label: "Agents",
@@ -370,12 +514,34 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.agents,
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
+      mark: null,
     },
   ] as const;
 
-  type SurfaceAction = (typeof actions)[number];
+  // C0X patch: C0VIBE modules join the launcher as native peer tiles, and the
+  // SMARCH controls section rides above the heading — both shell-pushed, so a
+  // standalone browser (no shell config) renders exactly upstream.
+  const shellConfig = useC0xShellConfig();
+  const openC0xModule = props.onOpenC0xModule;
+  const moduleActions: LauncherAction[] = openC0xModule
+    ? shellConfig.modules.map((module) => ({
+        label: module.title,
+        description: module.blurb,
+        icon: c0xModuleIcon(module.icon),
+        shortcut: "",
+        available: module.available,
+        disabledReason: module.disabledReason,
+        onClick: () => openC0xModule(module.id),
+        badgeCount: 0,
+        mark: module.mark,
+      }))
+    : [];
+  const surfaceActions: readonly LauncherAction[] = actions;
+  const hasShellContent = shellConfig.smarch !== null || moduleActions.length > 0;
 
-  const availableActions = actions.filter((action) => action.available);
+  const availableActions = [...surfaceActions, ...moduleActions].filter(
+    (action) => action.available,
+  );
   const highlightIndex =
     availableActions.length === 0 ? -1 : Math.min(highlight, availableActions.length - 1);
 
@@ -436,10 +602,10 @@ function RightPanelEmptyState(props: {
     node?.focus();
   }, []);
 
-  const isHighlighted = (action: SurfaceAction) =>
+  const isHighlighted = (action: LauncherAction) =>
     highlightIndex !== -1 && availableActions[highlightIndex] === action;
 
-  const actionIcon = (action: SurfaceAction, iconClassName = "size-4") => {
+  const actionIcon = (action: LauncherAction, iconClassName = "size-4") => {
     const Icon = action.icon;
     return (
       <span className="relative inline-flex shrink-0">
@@ -460,27 +626,64 @@ function RightPanelEmptyState(props: {
     "rounded-lg border border-border/80 bg-card dark:border-transparent dark:shadow-none dark:inset-ring-1 dark:inset-ring-white/5";
   const highlightedCardClass = "bg-accent/60 dark:inset-ring-white/20";
 
-  return (
-    <div
-      ref={focusOnMount}
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
-      aria-label="Open a surface"
-      data-surface-launcher-keys={availableActions.map((action) => action.shortcut).join("")}
-      className={cn(
-        "flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 pt-6 outline-none",
-        // The panel topbar sits above this container; matching bottom padding
-        // keeps the cards centered against the full panel, not the leftover.
-        "pb-[calc(var(--workspace-topbar-height)+--spacing(6))]",
-      )}
-    >
-      <div className="relative w-full max-w-lg">
-        <div className="absolute inset-x-0 bottom-full mb-5 text-center">
-          <h3 className="font-medium text-foreground text-sm">Open a surface</h3>
-          <p className="mt-1 text-muted-foreground text-xs">
-            Choose what to show in the right panel.
-          </p>
-        </div>
+  const renderAction = (action: LauncherAction) =>
+    action.available ? (
+      <button
+        key={action.label}
+        type="button"
+        onClick={action.onClick}
+        onMouseEnter={() => setHighlight(availableActions.indexOf(action))}
+        onMouseLeave={() =>
+          setHighlight((current) => (current === availableActions.indexOf(action) ? -1 : current))
+        }
+        className={cn(
+          "relative flex w-full cursor-pointer flex-col items-start p-4 text-left transition hover:border-border hover:bg-accent/60",
+          cardShellClass,
+          isHighlighted(action) && highlightedCardClass,
+        )}
+      >
+        {action.shortcut ? <Kbd className="absolute top-3 right-3">{action.shortcut}</Kbd> : null}
+        {action.mark ? (
+          <img
+            src={action.mark}
+            alt={action.label}
+            className="h-3.5 w-auto max-w-full object-contain"
+          />
+        ) : (
+          <span className="flex items-center gap-2 pe-8">
+            {actionIcon(action)}
+            <span className="font-medium text-sm">{action.label}</span>
+          </span>
+        )}
+        <span className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
+          {action.description}
+        </span>
+      </button>
+    ) : (
+      <div
+        key={action.label}
+        className={cn("relative flex w-full flex-col items-start p-4 opacity-40", cardShellClass)}
+      >
+        {action.shortcut ? <Kbd className="absolute top-3 right-3">{action.shortcut}</Kbd> : null}
+        {action.mark ? (
+          <img
+            src={action.mark}
+            alt={action.label}
+            className="h-3.5 w-auto max-w-full object-contain"
+          />
+        ) : (
+          <span className="flex items-center gap-2 pe-8">
+            {actionIcon(action)}
+            <span className="font-medium text-sm">{action.label}</span>
+          </span>
+        )}
+        <span className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
+          {action.disabledReason}
+        </span>
+      </div>
+    );
+
+  const surfaceCards = (
         <div className="grid grid-cols-2 gap-2">
           {actions.map((action) =>
             action.available ? (
@@ -576,7 +779,55 @@ function RightPanelEmptyState(props: {
             ),
           )}
         </div>
-      </div>
+  );
+
+  const launcherHeading = (
+    <>
+      <h3 className="font-medium text-foreground text-sm">Open a surface</h3>
+      <p className="mt-1 text-muted-foreground text-xs">Choose what to show in the right panel.</p>
+    </>
+  );
+
+  return (
+    <div
+      ref={focusOnMount}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      aria-label="Open a surface"
+      data-surface-launcher-keys={availableActions.map((action) => action.shortcut).join("")}
+      className={cn(
+        "flex min-h-0 flex-1 overflow-y-auto px-6 pt-6 outline-none",
+        // C0X patch: with shell sections the column top-anchors and scrolls
+        // (my-auto below still centers it while it fits); upstream keeps its
+        // centered layout untouched.
+        hasShellContent ? "flex-col items-center" : "items-center justify-center",
+        // The panel topbar sits above this container; matching bottom padding
+        // keeps the cards centered against the full panel, not the leftover.
+        "pb-[calc(var(--workspace-topbar-height)+--spacing(6))]",
+      )}
+    >
+      {hasShellContent ? (
+        <div className="my-auto w-full max-w-lg shrink-0">
+          {shellConfig.smarch ? (
+            <div className="mb-6">
+              <C0xSmarchSection smarch={shellConfig.smarch} />
+            </div>
+          ) : null}
+          <div className="mb-5 text-center">{launcherHeading}</div>
+          {surfaceCards}
+          {moduleActions.length > 0 ? (
+            <>
+              <h3 className="mt-6 font-medium text-foreground text-sm">C0VIBE modules</h3>
+              <div className="mt-2 grid grid-cols-2 gap-2">{moduleActions.map(renderAction)}</div>
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <div className="relative w-full max-w-lg">
+          <div className="absolute inset-x-0 bottom-full mb-5 text-center">{launcherHeading}</div>
+          {surfaceCards}
+        </div>
+      )}
     </div>
   );
 }
@@ -591,6 +842,10 @@ function surfaceTitle(
       return "Diff";
     case "files":
       return "Files";
+    case "c0x-module":
+      // C0X patch: the shell registry names the tab; the raw id is the
+      // honest fallback when a config push has not landed yet.
+      return c0xModuleById(surface.moduleId)?.title ?? surface.moduleId;
     case "file":
       return surface.relativePath.slice(
         Math.max(surface.relativePath.lastIndexOf("/"), surface.relativePath.lastIndexOf("\\")) + 1,
@@ -651,6 +906,9 @@ function SurfaceIcon({
   environmentId: EnvironmentId | null;
   pullRequestStatusSeeds: Readonly<Record<string, PullRequestTabStatusSeed>> | undefined;
 }) {
+  // C0X patch: subscribes to shell-config pushes so module tab icons (and,
+  // through the shared re-render, their titles) settle once the registry lands.
+  const shellConfig = useC0xShellConfig();
   switch (surface.kind) {
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
@@ -685,6 +943,11 @@ function SurfaceIcon({
       );
     case "agents":
       return <Bot className="size-3 shrink-0" />;
+    case "c0x-module": {
+      const module = shellConfig.modules.find((entry) => entry.id === surface.moduleId);
+      const Icon = c0xModuleIcon(module?.icon);
+      return <Icon className="size-3 shrink-0" />;
+    }
   }
 }
 
@@ -824,6 +1087,22 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     setAddSurfaceMenuOpen(false);
     action.onClick();
   };
+  const tabDragRef = useRef<TabDragState | null>(null);
+  const suppressedClickSurfaceRef = useRef<string | null>(null);
+  const [tabDrag, setTabDrag] = useState<TabDragState | null>(null);
+  // C0X patch: shell-pushed module registry for the add-surface menu.
+  const shellConfig = useC0xShellConfig();
+
+  const updateTabDrag = useCallback((next: TabDragState | null) => {
+    tabDragRef.current = next;
+    setTabDrag(next);
+  }, []);
+
+  useLayoutEffect(() => {
+    const drag = tabDragRef.current;
+    if (!drag?.settling || props.surfaces[drag.toIndex]?.id !== drag.surfaceId) return;
+    updateTabDrag(null);
+  }, [props.surfaces, updateTabDrag]);
 
   const handleTabContextMenu = useCallback(
     async (event: ReactMouseEvent, surface: RightPanelSurface) => {
@@ -858,6 +1137,20 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             canResolveRuntimeTabId: props.previewRuntimeTabId !== undefined,
           }),
         });
+      }
+      if (props.onMoveSurface) {
+        items.push(
+          {
+            id: "move-left",
+            label: "Move left",
+            disabled: surfaceIndex === 0,
+          },
+          {
+            id: "move-right",
+            label: "Move right",
+            disabled: surfaceIndex >= props.surfaces.length - 1,
+          },
+        );
       }
       items.push(
         { id: "close", label: "Close" },
@@ -897,6 +1190,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           }
           break;
         }
+        case "move-left":
+          props.onMoveSurface?.(surface, surfaceIndex - 1);
+          break;
+        case "move-right":
+          props.onMoveSurface?.(surface, surfaceIndex + 1);
+          break;
         case "close":
           props.onCloseSurface(surface);
           break;
@@ -912,6 +1211,110 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         case null:
           break;
       }
+    },
+    [props],
+  );
+  const handleTabPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>, surface: RightPanelSurface) => {
+      if (!props.onMoveSurface || event.button !== 0 || event.isPrimary === false) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-tab-close]")) return;
+      const rects = Array.from(
+        event.currentTarget.parentElement?.querySelectorAll<HTMLElement>(
+          "[data-right-panel-tab-id]",
+        ) ?? [],
+        (element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            id: element.dataset.rightPanelTabId ?? "",
+            left: rect.left,
+            right: rect.right,
+            width: rect.width,
+          };
+        },
+      );
+      const fromIndex = rects.findIndex((rect) => rect.id === surface.id);
+      if (fromIndex < 0) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      updateTabDrag({
+        pointerId: event.pointerId,
+        surfaceId: surface.id,
+        startX: event.clientX,
+        startY: event.clientY,
+        pointerX: event.clientX,
+        pointerY: event.clientY,
+        fromIndex,
+        toIndex: fromIndex,
+        dragging: false,
+        settling: false,
+        rects,
+      });
+    },
+    [props.onMoveSurface, updateTabDrag],
+  );
+  const handleTabPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const current = tabDragRef.current;
+      if (!current || current.pointerId !== event.pointerId || current.settling) return;
+      const next = updateTabDragPointer(current, event.clientX, event.clientY);
+      updateTabDrag(next);
+      if (next.dragging) event.preventDefault();
+    },
+    [updateTabDrag],
+  );
+  const handleTabPointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>, surface: RightPanelSurface) => {
+      const current = tabDragRef.current;
+      if (!current || current.pointerId !== event.pointerId || current.surfaceId !== surface.id) {
+        return;
+      }
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      const release = resolveTabPointerRelease(current, event.clientX, event.clientY);
+      if (release.kind === "activate") {
+        updateTabDrag(null);
+        return;
+      }
+      event.preventDefault();
+      const { drag: positioned, toIndex } = release;
+      suppressedClickSurfaceRef.current = surface.id;
+      window.setTimeout(() => {
+        if (suppressedClickSurfaceRef.current === surface.id) {
+          suppressedClickSurfaceRef.current = null;
+        }
+      }, 0);
+      if (toIndex === current.fromIndex) {
+        updateTabDrag(null);
+        return;
+      }
+      updateTabDrag({ ...positioned, toIndex, settling: true });
+      props.onMoveSurface?.(surface, toIndex);
+    },
+    [props, updateTabDrag],
+  );
+  const handleTabPointerCancel = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (tabDragRef.current?.pointerId !== event.pointerId) return;
+      updateTabDrag(null);
+    },
+    [updateTabDrag],
+  );
+  const handleTabKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>, surface: RightPanelSurface) => {
+      if (!props.onMoveSurface) return;
+      const surfaceIndex = props.surfaces.findIndex((entry) => entry.id === surface.id);
+      if (surfaceIndex < 0) return;
+      const toIndex = keyboardTabMoveIndex(
+        event.key,
+        event.altKey,
+        surfaceIndex,
+        props.surfaces.length,
+      );
+      if (toIndex === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      props.onMoveSurface(surface, toIndex);
     },
     [props],
   );
@@ -984,7 +1387,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     >
       <div
         className={cn(
-          "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1 pl-2",
+          "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center border-slate-900/10 border-b pl-2 dark:border-white/[0.08]",
           // The sheet overlays from the viewport top, so its tab bar keeps
           // the titlebar's height: a compact row re-centers the layout
           // controls a few pixels higher and the cluster jumps on open.
@@ -997,6 +1400,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           props.mode === "inline" && props.maximized && COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
         )}
         data-right-panel-tabbar
+        /* C0X patch: build-capability marker — the shell feature-detects the
+           native panel through this attribute and stands its overlays down. */
+        data-c0x-native="1"
       >
         <ScrollArea
           ref={tabListRef}
@@ -1005,7 +1411,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           className="min-w-0 flex-1 rounded-none"
           data-right-panel-tab-list
         >
-          <div className="flex h-full w-max min-w-full items-center gap-1">
+          <div className="flex h-full w-max min-w-full items-end gap-0.5">
             {props.surfaces.map((surface) => {
               const active = surface.id === props.activeSurfaceId;
               const pending = props.pendingSurfaceIds.has(surface.id);
@@ -1019,19 +1425,63 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
               const audioRuntimeTabId = previewTabId
                 ? (props.previewRuntimeTabId?.(previewTabId) ?? null)
                 : null;
+              const c0xModule =
+                surface.kind === "c0x-module"
+                  ? (shellConfig.modules.find((module) => module.id === surface.moduleId) ?? null)
+                  : null;
+              const accent = c0xModule?.accent ?? null;
+              const mark = c0xModule?.mark ?? null;
+              const accentStyle = accent
+                ? ({
+                    "--c0x-module-accent": accent,
+                    ...(active
+                      ? {
+                          backgroundColor: `color-mix(in srgb, ${accent} ${resolvedTheme === "dark" ? 10 : 14}%, transparent)`,
+                        }
+                      : {}),
+                  } as CSSProperties)
+                : undefined;
+              const transformX = tabDragTransform(surface.id, tabDrag);
+              const dragged = tabDrag?.surfaceId === surface.id && tabDrag.dragging;
+              const tabStyle = {
+                ...accentStyle,
+                touchAction: props.onMoveSurface ? "none" : undefined,
+                ...(tabDrag
+                  ? {
+                      transform: `translate3d(${transformX}px, 0, 0)`,
+                      transitionProperty:
+                        dragged && !tabDrag.settling ? "none" : "transform, background-color",
+                      transitionDuration: "120ms",
+                      transitionTimingFunction: "ease-out",
+                      willChange: "transform",
+                      zIndex: dragged ? 10 : undefined,
+                    }
+                  : {}),
+              } satisfies CSSProperties;
               return (
                 <div
                   key={surface.id}
                   data-active-tab={active}
+                  data-right-panel-tab-id={surface.id}
+                  data-tab-dragging={dragged || undefined}
+                  onPointerDown={(event) => handleTabPointerDown(event, surface)}
+                  onPointerMove={handleTabPointerMove}
+                  onPointerUp={(event) => handleTabPointerUp(event, surface)}
+                  onPointerCancel={handleTabPointerCancel}
                   onMouseDown={handleTabMouseDown}
                   onAuxClick={(event) => handleTabAuxClick(event, surface)}
                   onContextMenu={(event) => void handleTabContextMenu(event, surface)}
+                  style={tabStyle}
                   className={cn(
                     "cursor-pointer group/tab flex h-6 max-w-36 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
                     ownsDesktopTitleBar && "[-webkit-app-region:no-drag]",
+                    props.onMoveSurface && "cursor-grab touch-none",
+                    dragged && "cursor-grabbing",
                     active
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                      ? accent
+                        ? "text-foreground dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                        : "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-slate-900/[0.04] hover:text-foreground dark:hover:bg-white/[0.04]",
                   )}
                 >
                   <PanelTabCloseButton
@@ -1086,15 +1536,51 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                       render={
                         <button
                           type="button"
-                          className="cursor-pointer flex min-w-0 items-center"
-                          onClick={() => props.onActivate(surface)}
+                          className={cn(
+                            "cursor-pointer flex min-w-0 items-center outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                            accent
+                              ? "focus-visible:ring-[var(--c0x-module-accent)]"
+                              : "focus-visible:ring-ring",
+                          )}
+                          aria-keyshortcuts={
+                            props.onMoveSurface ? "Alt+ArrowLeft Alt+ArrowRight" : undefined
+                          }
+                          onKeyDown={(event) => handleTabKeyDown(event, surface)}
+                          onClick={(event) => {
+                            if (suppressedClickSurfaceRef.current === surface.id) {
+                              event.preventDefault();
+                              suppressedClickSurfaceRef.current = null;
+                              return;
+                            }
+                            props.onActivate(surface);
+                          }}
                         >
-                          <span className="truncate">{title}</span>
+                          {mark ? (
+                            <img
+                              src={mark}
+                              alt={title}
+                              className={cn(
+                                "h-3.5 w-auto max-w-full object-contain transition-opacity duration-[120ms] ease-out",
+                                active
+                                  ? "opacity-100"
+                                  : "opacity-[0.7] group-hover/tab:opacity-90 dark:opacity-[0.45] dark:group-hover/tab:opacity-75",
+                              )}
+                            />
+                          ) : (
+                            <span className="truncate">{title}</span>
+                          )}
                         </button>
                       }
                     />
                     <TooltipPopup>{title}</TooltipPopup>
                   </Tooltip>
+                  {active && accent ? (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5"
+                      style={{ backgroundColor: accent }}
+                    />
+                  ) : null}
                 </div>
               );
             })}
@@ -1183,6 +1669,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                       </SurfaceMenuItem>
                     );
                   })}
+                  {props.onOpenC0xModule && shellConfig.modules.length > 0 ? <MenuSeparator /> : null}
+                  {props.onOpenC0xModule ? shellConfig.modules.map((module) => (
+                    <MenuItem key={module.id} disabled={!module.available} onClick={() => props.onOpenC0xModule?.(module.id)}>
+                      {module.mark ? <img src={module.mark} alt={module.title} className="h-3.5 w-auto max-w-32 object-contain" /> : module.title}
+                    </MenuItem>
+                  )) : null}
                 </MenuPopup>
               </Menu>
             ) : null}
@@ -1251,6 +1743,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddFiles={props.onAddFiles}
             onAddPullRequest={props.onAddPullRequest}
             onAddAgents={props.onAddAgents}
+            onOpenC0xModule={props.onOpenC0xModule ?? null}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}

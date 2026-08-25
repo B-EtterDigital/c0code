@@ -27,6 +27,8 @@ const RIGHT_PANEL_KINDS = [
   "terminal",
   "pull-request",
   "agents",
+  // C0X patch: a C0VIBE module projected into the panel by the host shell.
+  "c0x-module",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -72,7 +74,17 @@ export type RightPanelSurface =
       number: number;
       url?: string;
     }
-  | { id: "agents"; kind: "agents" };
+  | { id: "agents"; kind: "agents" }
+  | {
+      /**
+       * C0X patch: one C0VIBE module (dictation, chat, capture, …) opened as a
+       * peer tab. The surface itself renders only a placeholder host — the
+       * embedding C0VIBE shell measures it and projects the module UI on top.
+       */
+      id: `c0x-module:${string}`;
+      kind: "c0x-module";
+      moduleId: string;
+    };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 // v9 removed the "plan" surface kind (plans render inline in the transcript).
@@ -114,8 +126,10 @@ interface RightPanelStoreState {
   ) => boolean;
   open: (
     ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request">,
+    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request" | "c0x-module">,
   ) => void;
+  /** C0X patch: open (or focus) one C0VIBE module as a peer tab. */
+  openC0xModule: (ref: ScopedThreadRef, moduleId: string) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
   openAttachment: (ref: ScopedThreadRef, attachment: ChatFileAttachment) => void;
@@ -139,6 +153,7 @@ interface RightPanelStoreState {
   activateTerminal: (ref: ScopedThreadRef, surfaceId: string, terminalId: string) => void;
   closeTerminal: (ref: ScopedThreadRef, surfaceId: string, terminalId: string) => void;
   activateSurface: (ref: ScopedThreadRef, surfaceId: string) => void;
+  moveSurface: (ref: ScopedThreadRef, surfaceId: string, toIndex: number) => void;
   closeSurface: (ref: ScopedThreadRef, surfaceId: string) => void;
   closeOtherSurfaces: (ref: ScopedThreadRef, surfaceId: string) => void;
   closeSurfacesToRight: (ref: ScopedThreadRef, surfaceId: string) => void;
@@ -150,7 +165,7 @@ interface RightPanelStoreState {
   toggleVisibility: (ref: ScopedThreadRef) => void;
   toggle: (
     ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request">,
+    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request" | "c0x-module">,
   ) => void;
   removeThread: (ref: ScopedThreadRef) => void;
 }
@@ -162,7 +177,7 @@ const EMPTY_THREAD_STATE: ThreadRightPanelState = {
 };
 
 const singletonSurface = (
-  kind: Exclude<RightPanelKind, "file" | "preview" | "terminal" | "pull-request">,
+  kind: Exclude<RightPanelKind, "file" | "preview" | "terminal" | "pull-request" | "c0x-module">,
 ): RightPanelSurface => {
   switch (kind) {
     case "diff":
@@ -198,6 +213,13 @@ const attachmentSurface = (attachment: ChatFileAttachment): RightPanelSurface =>
   revealLine: null,
   revealRequestId: 0,
   attachment,
+});
+
+/** C0X patch: one tab per module id, so reopening focuses instead of duplicating. */
+const c0xModuleSurface = (moduleId: string): RightPanelSurface => ({
+  id: `c0x-module:${moduleId}`,
+  kind: "c0x-module",
+  moduleId,
 });
 
 const terminalSurface = (terminalId: string): RightPanelSurface => ({
@@ -292,6 +314,21 @@ const userAction = (
   },
 });
 
+export function moveRightPanelSurface(
+  surfaces: RightPanelSurface[],
+  surfaceId: string,
+  toIndex: number,
+): RightPanelSurface[] {
+  const fromIndex = surfaces.findIndex((surface) => surface.id === surfaceId);
+  const boundedIndex = Math.max(0, Math.min(toIndex, surfaces.length - 1));
+  if (fromIndex < 0 || fromIndex === boundedIndex) return surfaces;
+  const reordered = [...surfaces];
+  const [surface] = reordered.splice(fromIndex, 1);
+  if (!surface) return surfaces;
+  reordered.splice(boundedIndex, 0, surface);
+  return reordered;
+}
+
 function normalizeRevealLine(line: number | undefined): number | null {
   if (line === undefined || !Number.isFinite(line)) return null;
   return Math.max(1, Math.trunc(line));
@@ -318,6 +355,13 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                     // Dropped surface kind: plans now render inline in the
                     // transcript (v9).
                     if ((surface as { kind?: string }).kind === "plan") return [];
+                    // C0X patch: rebuild module surfaces defensively — a
+                    // malformed persisted record drops instead of rendering.
+                    if ((surface as { kind?: string }).kind === "c0x-module") {
+                      const moduleId = (surface as { moduleId?: unknown }).moduleId;
+                      if (typeof moduleId !== "string" || moduleId.length === 0) return [];
+                      return [c0xModuleSurface(moduleId)];
+                    }
                     if (surface.kind === "file") {
                       const revealLine =
                         typeof surface.revealLine === "number" &&
@@ -461,6 +505,12 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             return upsertSurface({ ...current, surfaces: withoutPlaceholder }, surface);
           }),
         ),
+      openC0xModule: (ref, moduleId) =>
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) =>
+            upsertSurface(current, c0xModuleSurface(moduleId)),
+          ),
+        ),
       openPullRequest: (ref, target) =>
         set((state) =>
           userAction(state, scopedThreadKey(ref), (current) => {
@@ -602,6 +652,14 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               : current,
           ),
         ),
+      moveSurface: (ref, surfaceId, toIndex) =>
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) => {
+            const surfaces = moveRightPanelSurface(current.surfaces, surfaceId, toIndex);
+            if (surfaces === current.surfaces) return current;
+            return { ...current, surfaces };
+          }),
+        ),
       closeSurface: (ref, surfaceId) =>
         set((state) =>
           userAction(state, scopedThreadKey(ref), (current) => {
@@ -661,18 +719,16 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         set((state) =>
           automaticUpdate(state, scopedThreadKey(ref), (current) => {
             const validIds = new Set(tabIds.map((tabId) => `browser:${tabId}`));
-            const nonBrowser = current.surfaces.filter((surface) => surface.kind !== "preview");
-            const existingBrowser = current.surfaces.filter(
-              (surface): surface is Extract<RightPanelSurface, { kind: "preview" }> =>
-                surface.kind === "preview" &&
-                surface.id !== "browser:new" &&
-                validIds.has(surface.id),
+            const existing = current.surfaces.filter(
+              (surface) =>
+                surface.kind !== "preview" ||
+                (surface.id !== "browser:new" && validIds.has(surface.id)),
             );
-            const knownIds = new Set(existingBrowser.map((surface) => surface.id));
+            const knownIds = new Set(existing.map((surface) => surface.id));
             const added = tabIds
               .filter((tabId) => !knownIds.has(`browser:${tabId}`))
               .map((tabId) => browserSurface(tabId));
-            const surfaces = [...nonBrowser, ...existingBrowser, ...added];
+            const surfaces = [...existing, ...added];
             const activeStillExists = surfaces.some(
               (surface) => surface.id === current.activeSurfaceId,
             );
