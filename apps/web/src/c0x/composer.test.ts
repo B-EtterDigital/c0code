@@ -3,6 +3,7 @@ import { type EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { registerC0xComposer } from "./composer";
+import { acknowledgeC0xComposerMediaSubmission, snapshotC0xComposerMediaSubmission } from './composerMediaReceipts';
 
 const target = scopeThreadRef("c0x-composer-test" as EnvironmentId, ThreadId.make("draft-a"));
 const other = scopeThreadRef("c0x-composer-test" as EnvironmentId, ThreadId.make("draft-b"));
@@ -31,7 +32,7 @@ describe("C0X extension of the original T3 draft", () => {
     const cleanup = registerC0xComposer(other, vi.fn());
     oldCleanup();
     expect(window.__c0xComposer?.insert("")).toBe("empty");
-    expect(Object.keys(window.__c0xComposer ?? {}).sort()).toEqual(["attach", "focus", "insert"]);
+    expect(Object.keys(window.__c0xComposer ?? {}).sort()).toEqual(["attach", "focus", "insert", "targetKey"]);
     cleanup();
   });
 
@@ -44,5 +45,21 @@ describe("C0X extension of the original T3 draft", () => {
     expect(stored.filter((entry) => entry.previewUrl === image.dataUrl)).toHaveLength(1);
     expect(stored.find((entry) => entry.previewUrl === image.dataUrl)?.file.size).toBe(1);
     cleanup();
+  });
+
+  it('acknowledges only media in the frozen send, preserving later and other-thread media', () => {
+    useComposerDraftStore.getState().setPrompt(target, '');
+    const cleanup = registerC0xComposer(target, vi.fn());
+    window.__c0xComposer?.insert('first recorded words', 'receipt-first');
+    const receipt = snapshotC0xComposerMediaSubmission(target, 'first recorded words', []);
+    window.__c0xComposer?.insert('later recorded words', 'receipt-later');
+    const otherCleanup = registerC0xComposer(other, vi.fn());
+    window.__c0xComposer?.insert('other recorded words', 'receipt-other');
+    acknowledgeC0xComposerMediaSubmission(receipt);
+    expect(window.__c0xShellEvents).toEqual([expect.objectContaining({ action: 'submitted', mediaIds: ['receipt-first'] })]);
+    expect(snapshotC0xComposerMediaSubmission(target, 'later recorded words', []).mediaIds).toEqual(['receipt-later']);
+    expect(snapshotC0xComposerMediaSubmission(other, 'other recorded words', []).mediaIds).toEqual(['receipt-other']);
+    cleanup();
+    otherCleanup();
   });
 });
