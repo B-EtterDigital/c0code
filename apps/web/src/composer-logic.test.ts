@@ -60,6 +60,9 @@ describe("composerSubmissionIntentForEnter", () => {
         shiftKey: false,
         modifierKey: false,
         isDraftThread: true,
+        isTurnRunning: false,
+        hasPendingUserInput: false,
+        fluidQueueEnabled: true,
       }),
     ).toBe("foreground");
   });
@@ -71,6 +74,9 @@ describe("composerSubmissionIntentForEnter", () => {
         shiftKey: false,
         modifierKey: false,
         isDraftThread: true,
+        isTurnRunning: true,
+        hasPendingUserInput: false,
+        fluidQueueEnabled: true,
       }),
     ).toBeNull();
   });
@@ -82,19 +88,25 @@ describe("composerSubmissionIntentForEnter", () => {
         shiftKey: true,
         modifierKey: false,
         isDraftThread: true,
+        isTurnRunning: true,
+        hasPendingUserInput: false,
+        fluidQueueEnabled: true,
       }),
     ).toBeNull();
   });
 
-  it("submits a new thread in the background with Mod+Enter", () => {
+  it("sends a draft directly in the foreground with Mod+Enter", () => {
     expect(
       composerSubmissionIntentForEnter({
         isMobileViewport: false,
         shiftKey: false,
         modifierKey: true,
         isDraftThread: true,
+        isTurnRunning: true,
+        hasPendingUserInput: false,
+        fluidQueueEnabled: true,
       }),
-    ).toBe("background");
+    ).toBe("foreground");
   });
 
   it("keeps Mod+Enter in the foreground for an active thread", () => {
@@ -104,6 +116,51 @@ describe("composerSubmissionIntentForEnter", () => {
         shiftKey: false,
         modifierKey: true,
         isDraftThread: false,
+        isTurnRunning: true,
+        hasPendingUserInput: false,
+        fluidQueueEnabled: true,
+      }),
+    ).toBe("foreground");
+  });
+
+  it("queues plain Enter while a turn is running and queuing is enabled", () => {
+    expect(
+      composerSubmissionIntentForEnter({
+        isMobileViewport: false,
+        shiftKey: false,
+        modifierKey: false,
+        isDraftThread: false,
+        isTurnRunning: true,
+        hasPendingUserInput: false,
+        fluidQueueEnabled: true,
+      }),
+    ).toBe("queue");
+  });
+
+  it("submits pending provider input instead of queuing it", () => {
+    expect(
+      composerSubmissionIntentForEnter({
+        isMobileViewport: false,
+        shiftKey: false,
+        modifierKey: false,
+        isDraftThread: false,
+        isTurnRunning: true,
+        hasPendingUserInput: true,
+        fluidQueueEnabled: true,
+      }),
+    ).toBe("foreground");
+  });
+
+  it("sends plain Enter directly when queuing is turned off", () => {
+    expect(
+      composerSubmissionIntentForEnter({
+        isMobileViewport: false,
+        shiftKey: false,
+        modifierKey: false,
+        isDraftThread: false,
+        isTurnRunning: true,
+        hasPendingUserInput: false,
+        fluidQueueEnabled: false,
       }),
     ).toBe("foreground");
   });

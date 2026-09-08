@@ -58,9 +58,16 @@ import {
 } from "../../composer-logic";
 import { DISCONNECTED_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
 import {
+  hydrateFluidQueueEntry,
+  restoreFluidQueueEntry,
+  type FluidQueueEntry,
+  useFluidQueueState,
+} from "../../c0x/fluidQueue";
+import {
   deriveComposerSendState,
   getAntigravitySendBlockReason,
   readFileAsDataUrl,
+  revokeBlobPreviewUrl,
   resolveComposerInteractionMode,
   resolveComposerProviderSelection,
 } from "../ChatView.logic";
@@ -177,6 +184,7 @@ import { ProviderModelPicker } from "./ProviderModelPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
+import { FluidQueueRows } from "./FluidQueueRows";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
@@ -1236,6 +1244,7 @@ export interface ChatComposerProps {
   maxFileAttachmentBytes: number | null;
   routeKind: "server" | "draft";
   routeThreadRef: ScopedThreadRef;
+  fluidQueueThreadKey: string;
   draftId: DraftId | null;
 
   // Thread context
@@ -1340,6 +1349,8 @@ export interface ChatComposerProps {
 
   // Callbacks
   onSend: (e?: { preventDefault: () => void }, intent?: ComposerSubmissionIntent) => void;
+  onDispatchFluidQueueEntry: (entry: FluidQueueEntry) => Promise<boolean>;
+  onOpenFluidQueueEntryInSideChat: (entry: FluidQueueEntry) => Promise<boolean>;
   onInterrupt: () => void;
   onImplementPlanInNewThread: () => void;
   onRespondToApproval: (
@@ -1386,6 +1397,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     maxFileAttachmentBytes,
     routeKind,
     routeThreadRef,
+    fluidQueueThreadKey,
     draftId,
     activeThreadId,
     activeThreadEnvironmentId: _activeThreadEnvironmentId,
@@ -1445,6 +1457,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onPageScrollKeyUp,
     onPageScrollRelease,
     onSend,
+    onDispatchFluidQueueEntry,
+    onOpenFluidQueueEntryInSideChat,
     onInterrupt,
     onImplementPlanInNewThread,
     onRespondToApproval,
@@ -1465,6 +1479,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onExpandImage,
     onFileOpen,
   } = props;
+  const fluidQueueState = useFluidQueueState();
   const activeTasksProgress = props.threadSyncPhase === null ? props.activeTasksProgress : null;
   const activeTaskSteps = props.threadSyncPhase === null ? props.activeTaskSteps : null;
   // ------------------------------------------------------------------
@@ -3051,9 +3066,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       shiftKey: false,
       modifierKey: true,
       isDraftThread: routeKind === "draft",
+      isTurnRunning: phase === "running",
+      hasPendingUserInput: activePendingProgress !== null,
+      fluidQueueEnabled: fluidQueueState.enabled,
     });
     submitComposer(undefined, intent ?? "foreground");
-  }, [isMobileViewport, routeKind, submitComposer]);
+  }, [
+    activePendingProgress,
+    fluidQueueState.enabled,
+    isMobileViewport,
+    phase,
+    routeKind,
+    submitComposer,
+  ]);
   const compactThreadContext = useCallback(() => {
     if (
       compactDisabled ||
@@ -3246,6 +3271,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             shiftKey: event.shiftKey,
             modifierKey: event.metaKey || event.ctrlKey,
             isDraftThread: routeKind === "draft",
+            isTurnRunning: phase === "running",
+            hasPendingUserInput: activePendingProgress !== null,
+            fluidQueueEnabled: fluidQueueState.enabled,
           })
         : null;
     if (submissionIntent) {
@@ -4878,6 +4906,50 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   // Render
   // ------------------------------------------------------------------
+  const editFluidQueueEntry = async (entry: FluidQueueEntry): Promise<boolean> => {
+    const result = await restoreFluidQueueEntry(composerDraftTarget, entry);
+    if (result === "occupied") {
+      toastManager.add({
+        type: "warning",
+        title: "Draft already has content",
+        description: "Send or clear the current draft before editing this queued message.",
+      });
+      return false;
+    }
+    if (result === "failed") {
+      toastManager.add({
+        type: "error",
+        title: "Queued message not restored",
+        description: "The queued copy is still available. Try again.",
+      });
+      return false;
+    }
+    const restored = useComposerDraftStore.getState().getComposerDraft(composerDraftTarget);
+    if (!restored) return false;
+    promptRef.current = restored.prompt;
+    composerImagesRef.current = restored.images;
+    composerFilesRef.current = restored.files;
+    composerTerminalContextsRef.current = restored.terminalContexts;
+    composerElementContextsRef.current = restored.elementContexts;
+    composerRef.current?.resetCursorState({
+      cursor: collapseExpandedComposerCursor(restored.prompt, restored.prompt.length),
+      prompt: restored.prompt,
+      detectTrigger: true,
+    });
+    scheduleComposerFocus();
+    return true;
+  };
+
+  const deleteFluidQueueEntry = (
+    _entry: FluidQueueEntry,
+    draft: ReturnType<typeof hydrateFluidQueueEntry>,
+  ): void => {
+    for (const image of draft.images) revokeBlobPreviewUrl(image.previewUrl);
+    for (const attachment of [...draft.images, ...draft.files]) {
+      releaseDraftAttachment(attachment);
+    }
+  };
+
   return (
     <form
       ref={composerFormRef}
@@ -5134,6 +5206,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           />
         ) : null}
       </ComposerBanner.Dock>
+      <FluidQueueRows
+        threadKey={fluidQueueThreadKey}
+        phase={phase}
+        onDispatch={onDispatchFluidQueueEntry}
+        onEdit={editFluidQueueEntry}
+        onOpenInSideChat={onOpenFluidQueueEntryInSideChat}
+        onDelete={deleteFluidQueueEntry}
+      />
       <div className="relative">
         <ComposerSurface.Main
           ref={composerMainSurfaceRef}

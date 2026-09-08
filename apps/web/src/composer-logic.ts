@@ -11,7 +11,7 @@ import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
 
 export type ComposerTriggerKind = "path" | "slash-command" | "skill";
 export type ComposerSlashCommand = "model" | "plan" | "default";
-export type ComposerSubmissionIntent = "foreground" | "background";
+export type ComposerSubmissionIntent = "foreground" | "background" | "queue";
 
 export interface ComposerTrigger {
   kind: ComposerTriggerKind;
@@ -29,11 +29,19 @@ export function composerSubmissionIntentForEnter(input: {
   shiftKey: boolean;
   modifierKey: boolean;
   isDraftThread: boolean;
+  isTurnRunning: boolean;
+  hasPendingUserInput: boolean;
+  fluidQueueEnabled: boolean;
 }): ComposerSubmissionIntent | null {
   if (input.isMobileViewport || input.shiftKey) {
     return null;
   }
-  return input.modifierKey && input.isDraftThread ? "background" : "foreground";
+  if (input.modifierKey) {
+    return "foreground";
+  }
+  return input.fluidQueueEnabled && input.isTurnRunning && !input.hasPendingUserInput
+    ? "queue"
+    : "foreground";
 }
 
 const isInlineTokenSegment = (segment: ComposerPromptSegment): boolean => segment.type !== "text";

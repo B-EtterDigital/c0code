@@ -176,7 +176,8 @@ export type C0xShellEvent =
   | { type: "smarch-set"; key: string; enabled: boolean }
   | { type: "smarch-announce" }
   | { type: "module-opened"; moduleId: string }
-  | { type: "module-closed"; moduleId: string };
+  | { type: "module-closed"; moduleId: string }
+  | { type: "fluid-queue-error"; operation: string; message: string };
 
 /**
  * Registers the shell→guest module opener (the chat view owns the thread ref

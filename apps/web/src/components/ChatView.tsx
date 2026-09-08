@@ -199,10 +199,20 @@ import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs } from "./RightPanelTabs";
 import { C0xModuleSurface } from "./c0x/C0xModuleSurface";
-import { c0xModuleById, registerC0xModuleOpener } from "~/c0x/nativeShell";
+import { c0xModuleById, postC0xShellEvent, registerC0xModuleOpener } from "~/c0x/nativeShell";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useC0xComposer } from "~/c0x/composer";
 import { useC0xAgentSessionImport } from "~/c0x/agentSessions";
+import {
+  enqueueFluidQueueEntry,
+  fluidQueueEntryLabel,
+  fluidQueueEntryStillMatchesDraft,
+  hydrateFluidQueueEntry,
+  readFluidQueueState,
+  removeFluidQueueEntry,
+  restoreFluidQueueEntry,
+  type FluidQueueEntry,
+} from "~/c0x/fluidQueue";
 import { AgentsPanel } from "./AgentsPanel";
 import {
   deriveAgentPanelModel,
@@ -6418,14 +6428,71 @@ export default function ChatView(props: ChatViewProps) {
       annotation: PreviewAnnotationPayload;
       image: ComposerImageAttachment | null;
     },
+    queuedEntry?: FluidQueueEntry,
   ) => {
     e?.preventDefault();
+    if (
+      submissionIntent === "queue" &&
+      !queuedEntry &&
+      phase === "running" &&
+      !activePendingProgress &&
+      readFluidQueueState().enabled
+    ) {
+      const queueDraft = useComposerDraftStore.getState().getComposerDraft(composerDraftTarget);
+      const queueSendContext = composerRef.current?.getSendContext();
+      if (!queueDraft || !composerDraftHasUserContent(queueDraft) || !queueSendContext) {
+        return false;
+      }
+      const entry = await enqueueFluidQueueEntry({
+        threadKey: routeThreadKey,
+        threadRef: routeThreadRef,
+        draft: queueDraft,
+        runtimeMode,
+        sendContext: {
+          providerAvailable: queueSendContext.providerAvailable,
+          selectedPromptEffort: queueSendContext.selectedPromptEffort,
+          selectedModelSelection: queueSendContext.selectedModelSelection,
+          selectedProvider: queueSendContext.selectedProvider,
+          selectedModel: queueSendContext.selectedModel,
+          selectedProviderModels: queueSendContext.selectedProviderModels,
+          interactionMode: queueSendContext.interactionMode,
+          interactionModeEnabled: queueSendContext.interactionModeEnabled,
+        },
+      });
+      if (!entry) {
+        toastManager.add({
+          type: "error",
+          title: "Message not queued",
+          description: "The draft is unchanged. Try again.",
+        });
+        return false;
+      }
+      const currentDraft = useComposerDraftStore.getState().getComposerDraft(composerDraftTarget);
+      if (!fluidQueueEntryStillMatchesDraft(entry, currentDraft)) {
+        removeFluidQueueEntry(routeThreadKey, entry.id);
+        toastManager.add({
+          type: "info",
+          title: "Draft changed while queuing",
+          description: "Nothing was moved. Press Enter again when the draft is ready.",
+        });
+        return false;
+      }
+      promptRef.current = "";
+      composerImagesRef.current = [];
+      composerFilesRef.current = [];
+      composerTerminalContextsRef.current = [];
+      composerElementContextsRef.current = [];
+      clearComposerDraftContent(composerDraftTarget);
+      composerRef.current?.resetCursorState();
+      return true;
+    }
     // Typed out in full rather than picked from the menu. Attachments or contexts
     // mean the user is sending a prompt, so those go through as usual.
     if (
       usageLimitsOffered &&
       usageLimitsKey !== null &&
       !directAnnotation &&
+      !queuedEntry &&
       !composerHasNonPromptContent &&
       isUsageLimitsCommand(promptRef.current)
     ) {
@@ -6493,7 +6560,26 @@ export default function ChatView(props: ChatViewProps) {
       onAdvanceActivePendingUserInput();
       return;
     }
-    const sendCtx = composerRef.current?.getSendContext();
+    if (queuedEntry && queuedEntry.threadKey !== routeThreadKey) {
+      postC0xShellEvent({
+        type: "fluid-queue-error",
+        operation: "dispatch-thread-binding",
+        message: "A queued message was refused because its thread binding changed.",
+      });
+      return false;
+    }
+    const queuedDraft = queuedEntry ? hydrateFluidQueueEntry(queuedEntry) : null;
+    const sendCtx = queuedEntry
+      ? {
+          ...queuedEntry.sendContext,
+          images: queuedDraft?.images ?? [],
+          files: queuedDraft?.files ?? [],
+          terminalContexts: queuedDraft?.terminalContexts ?? [],
+          elementContexts: queuedDraft?.elementContexts ?? [],
+          previewAnnotations: queuedDraft?.previewAnnotations ?? [],
+          reviewComments: queuedDraft?.reviewComments ?? [],
+        }
+      : composerRef.current?.getSendContext();
     if (!sendCtx?.providerAvailable) {
       notifyDirectAnnotationAttached();
       return;
@@ -6545,7 +6631,8 @@ export default function ChatView(props: ChatViewProps) {
             },
           ]
         : sendContextPreviewAnnotations;
-    const promptForSend = promptRef.current;
+    const promptForSend = queuedEntry?.draft.prompt ?? promptRef.current;
+    const runtimeModeForSend = queuedEntry?.runtimeMode ?? runtimeMode;
     const {
       trimmedPrompt: trimmed,
       sendableTerminalContexts: sendableComposerTerminalContexts,
@@ -6561,6 +6648,7 @@ export default function ChatView(props: ChatViewProps) {
         composerReviewComments.length,
     });
     const feedbackCommand =
+      !queuedEntry &&
       ctxSelectedProvider === "codex" &&
       composerImages.length === 0 &&
       composerFiles.length === 0 &&
@@ -6621,6 +6709,7 @@ export default function ChatView(props: ChatViewProps) {
     }
     if (
       !directAnnotation &&
+      !queuedEntry &&
       sendInteractionModeEnabled &&
       showPlanFollowUpPrompt &&
       activeProposedPlan &&
@@ -6652,6 +6741,7 @@ export default function ChatView(props: ChatViewProps) {
     }
     // Providers without the legacy toggle receive their native commands unchanged.
     const standaloneSlashCommand =
+      !queuedEntry &&
       sendInteractionModeEnabled &&
       composerImages.length === 0 &&
       composerFiles.length === 0 &&
@@ -6918,9 +7008,11 @@ export default function ChatView(props: ChatViewProps) {
         }),
       );
     }
-    promptRef.current = "";
-    clearComposerDraftContent(composerDraftTarget);
-    composerRef.current?.resetCursorState();
+    if (!queuedEntry) {
+      promptRef.current = "";
+      clearComposerDraftContent(composerDraftTarget);
+      composerRef.current?.resetCursorState();
+    }
 
     let firstComposerImageName: string | null = null;
     if (composerImagesSnapshot.length > 0) {
@@ -6973,7 +7065,7 @@ export default function ChatView(props: ChatViewProps) {
         ...(localCheckoutBranchMismatch
           ? { branch: localCheckoutBranchMismatch.currentBranch }
           : {}),
-        runtimeMode,
+        runtimeMode: runtimeModeForSend,
         interactionMode: sendInteractionMode,
       });
       if (settingsResult._tag === "Failure") {
@@ -7004,7 +7096,7 @@ export default function ChatView(props: ChatViewProps) {
                       projectId: activeProject.id,
                       title,
                       modelSelection: threadCreateModelSelection,
-                      runtimeMode,
+                      runtimeMode: runtimeModeForSend,
                       interactionMode: sendInteractionMode,
                       branch: activeThreadBranch,
                       worktreePath: activeThread.worktreePath,
@@ -7044,7 +7136,7 @@ export default function ChatView(props: ChatViewProps) {
           },
           modelSelection: ctxSelectedModelSelection,
           titleSeed: title,
-          runtimeMode,
+          runtimeMode: runtimeModeForSend,
           interactionMode: sendInteractionMode,
           ...(bootstrap ? { bootstrap } : {}),
           createdAt: messageCreatedAt,
@@ -7116,7 +7208,15 @@ export default function ChatView(props: ChatViewProps) {
     }
 
     if (failure !== null) {
+      if (queuedEntry) {
+        setOptimisticUserMessages((existing) => {
+          const removed = existing.filter((message) => message.id === messageIdForSend);
+          for (const message of removed) revokeUserMessagePreviewUrls(message);
+          return existing.filter((message) => message.id !== messageIdForSend);
+        });
+      }
       if (
+        !queuedEntry &&
         promptRef.current.length === 0 &&
         composerImagesRef.current.length === 0 &&
         composerFilesRef.current.length === 0 &&
@@ -7183,7 +7283,105 @@ export default function ChatView(props: ChatViewProps) {
       );
       resetLocalDispatch();
     }
+    return turnStartSucceeded;
   };
+
+  const fluidQueueSendRef = useRef(onSend);
+  fluidQueueSendRef.current = onSend;
+  const onDispatchFluidQueueEntry = useCallback(
+    async (entry: FluidQueueEntry) =>
+      (await fluidQueueSendRef.current(undefined, "foreground", undefined, entry)) === true,
+    [],
+  );
+
+  const onOpenFluidQueueEntryInSideChat = useCallback(
+    async (entry: FluidQueueEntry): Promise<boolean> => {
+      const sideWindow = window.open("about:blank", "_blank");
+      if (!sideWindow) {
+        toastManager.add({
+          type: "warning",
+          title: "Side chat blocked",
+          description: "Allow pop-ups for T3 Code, then try again.",
+        });
+        return false;
+      }
+
+      let createdThreadRef: ScopedThreadRef | null = null;
+      let threadCreated = false;
+      try {
+        if (!activeProject || !activeThread) {
+          throw new Error("The queued message no longer has an active project.");
+        }
+        const createdAt = new Date().toISOString();
+        createdThreadRef = scopeThreadRef(activeProject.environmentId, newThreadId());
+        const createResult = await createThread({
+          environmentId: createdThreadRef.environmentId,
+          input: {
+            threadId: createdThreadRef.threadId,
+            projectId: activeProject.id,
+            title: truncate(fluidQueueEntryLabel(entry)),
+            modelSelection: entry.sendContext.selectedModelSelection,
+            runtimeMode: entry.runtimeMode,
+            interactionMode: entry.sendContext.interactionMode,
+            branch: activeThreadBranch,
+            worktreePath: activeThread.worktreePath,
+            createdAt,
+          },
+        });
+        if (createResult._tag === "Failure") {
+          throw squashAtomCommandFailure(createResult);
+        }
+        threadCreated = true;
+
+        const restoreResult = await restoreFluidQueueEntry(createdThreadRef, entry);
+        if (restoreResult !== "restored") {
+          throw new Error("The queued draft could not be copied into the side chat.");
+        }
+
+        sideWindow.opener = null;
+        sideWindow.location.replace(
+          `/${encodeURIComponent(createdThreadRef.environmentId)}/${encodeURIComponent(createdThreadRef.threadId)}`,
+        );
+        return true;
+      } catch (error) {
+        sideWindow.close();
+        postC0xShellEvent({
+          type: "fluid-queue-error",
+          operation: "open-side-chat",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        if (createdThreadRef && threadCreated) {
+          clearComposerDraftContent(createdThreadRef);
+          const cleanupResult = await deleteThread({
+            environmentId: createdThreadRef.environmentId,
+            input: { threadId: createdThreadRef.threadId },
+          });
+          if (cleanupResult._tag === "Failure" && !isAtomCommandInterrupted(cleanupResult)) {
+            postC0xShellEvent({
+              type: "fluid-queue-error",
+              operation: "cleanup-side-chat",
+              message: String(squashAtomCommandFailure(cleanupResult)),
+            });
+          }
+        }
+        toastManager.add({
+          type: "error",
+          title: "Side chat not opened",
+          description:
+            error instanceof Error ? error.message : "The queued copy is still available.",
+        });
+        return false;
+      }
+    },
+    [
+      activeProject,
+      activeThread,
+      activeThreadBranch,
+      clearComposerDraftContent,
+      createThread,
+      deleteThread,
+    ],
+  );
 
   const onRespondToApproval = useCallback(
     async (requestId: ApprovalRequestId, decision: ProviderApprovalDecision) => {
@@ -8330,6 +8528,7 @@ export default function ChatView(props: ChatViewProps) {
                             maxFileAttachmentBytes={maxFileAttachmentBytes}
                             routeKind={routeKind}
                             routeThreadRef={routeThreadRef}
+                            fluidQueueThreadKey={routeThreadKey}
                             draftId={draftId}
                             activeThreadId={activeThreadId}
                             activeThreadEnvironmentId={activeThread?.environmentId}
@@ -8409,6 +8608,8 @@ export default function ChatView(props: ChatViewProps) {
                             onPageScrollKeyUp={onComposerPageScrollKeyUp}
                             onPageScrollRelease={onComposerPageScrollRelease}
                             onSend={onSend}
+                            onDispatchFluidQueueEntry={onDispatchFluidQueueEntry}
+                            onOpenFluidQueueEntryInSideChat={onOpenFluidQueueEntryInSideChat}
                             onInterrupt={onInterrupt}
                             onImplementPlanInNewThread={onImplementPlanInNewThread}
                             onRespondToApproval={onRespondToApproval}
