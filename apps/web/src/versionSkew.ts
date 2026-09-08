@@ -12,6 +12,8 @@ export interface VersionMismatch {
   readonly hint: string;
 }
 
+export const C0X_RUNTIME_UPDATE_OWNERSHIP = "c0x" as const;
+
 const VERSION_MISMATCH_DISMISSALS_STORAGE_KEY = "t3code:version-mismatch-dismissals:v1";
 
 // Runtime failures retain their identity until the next attempt. Dismiss only
@@ -87,7 +89,9 @@ export function resolveVersionMismatch(
 export function resolveServerConfigVersionMismatch(
   serverConfig: Pick<ServerConfig, "environment"> | null | undefined,
 ): VersionMismatch | null {
-  return resolveVersionMismatch(serverConfig?.environment.serverVersion);
+  // C0X ships and verifies this client/server pair together.
+  void serverConfig;
+  return null;
 }
 
 /** The update path the connected server offers, or null when it only

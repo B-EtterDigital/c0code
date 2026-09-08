@@ -121,6 +121,7 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
       <div className={cn("relative flex flex-col-reverse", hasStack && stackExpanded && "z-50")}>
         <div
           key={frontItem.id}
+          data-composer-banner-id={frontItem.id}
           className={cn(
             "relative z-10 transition-[translate,opacity] duration-220 ease-in",
             exitingItemId === frontItem.id
@@ -216,6 +217,7 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
                   {stackedItems.map((item) => (
                     <div
                       key={item.id}
+                      data-composer-banner-id={item.id}
                       className={cn(
                         "transition-[translate,opacity] duration-220 ease-in",
                         exitingItemId === item.id
