@@ -3209,6 +3209,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       if (!editor?.isCaretOnVisualEdge(direction === "backward" ? "start" : "end")) {
         return false;
       }
+      // Reach the text boundary before leaving a recalled prompt. A caret
+      // on the first/last visual line can still be in the middle of that line.
+      const snapshot = editor.readSnapshot();
+      const boundary = direction === "backward" ? 0 : snapshot.value.length;
+      if (snapshot.expandedCursor !== boundary) {
+        if (direction === "backward") editor.focusAt(0);
+        else editor.focusAtEnd();
+        return true;
+      }
       const step = stepComposerPromptHistory({
         direction,
         entries: buildComposerPromptHistoryEntries(promptHistoryMessagesRef.current),
