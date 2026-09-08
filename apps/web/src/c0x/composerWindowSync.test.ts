@@ -36,7 +36,7 @@ it("applies another window's draft while retaining pending typing and the live i
   expect(draft?.prompt).toBe("typing before debounce");
   expect(draft?.runtimeMode).toBe("full-access");
   expect(draft?.images[0]?.file).toBe(file);
-  expect(draft?.nonPersistedImageIds).toContain("pending");
+  expect(draft?.images.map((image) => image.id)).toContain("pending");
   listeners.get("beforeunload")?.({});
   expect(JSON.parse(storage.getItem(key) as string).state).toEqual(partialize(store.getState()));
 });

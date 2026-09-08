@@ -1,4 +1,4 @@
-import type { StateStorage } from "../lib/storage";
+import { resolveStorage, type StateStorage } from "../lib/storage";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -25,7 +25,8 @@ export function mergeComposerSnapshots(base: unknown, local: unknown, remote: un
 }
 
 /** The merge runs at the actual deferred flush, including beforeunload. */
-export function createComposerStorage(baseStorage: StateStorage) {
+export function createComposerStorage(storage: Partial<StateStorage> | null | undefined) {
+  const baseStorage = resolveStorage(storage);
   let baseline: unknown;
   const parse = (raw: string | null) => raw === null ? undefined : JSON.parse(raw) as unknown;
   const read = (name: string) => {

@@ -4041,7 +4041,8 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     );
     // An image being converted to a data URL has no persisted representation yet.
     for (const [key, draft] of Object.entries(current.draftsByThreadKey)) {
-      if (!draftsByThreadKey[key] && draft.nonPersistedImageIds.length > 0) draftsByThreadKey[key] = draft;
+      if (!draftsByThreadKey[key] && draft.images.some((image) =>
+        !draft.persistedAttachments.some((attachment) => attachment.id === image.id))) draftsByThreadKey[key] = draft;
     }
     composerDraftStore.setState({
       draftsByThreadKey,

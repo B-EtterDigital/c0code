@@ -6,7 +6,8 @@ export function preserveLiveComposerDraft(
   current: ComposerThreadDraftState | undefined,
 ): ComposerThreadDraftState {
   if (!current) return hydrated;
-  const pending = new Set(current.nonPersistedImageIds);
+  const persistedIds = new Set(current.persistedAttachments.map((attachment) => attachment.id));
+  const pending = new Set(current.images.filter((image) => !persistedIds.has(image.id)).map((image) => image.id));
   const images = hydrated.images.map((image) => {
     const existing = current.images.find((candidate) => candidate.id === image.id);
     return existing ?? image;
