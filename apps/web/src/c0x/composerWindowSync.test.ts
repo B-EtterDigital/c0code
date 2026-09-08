@@ -22,7 +22,7 @@ it("applies another window's draft while retaining pending typing and the live i
   listeners.get("beforeunload")?.({});
   const baseline = JSON.parse(storage.getItem(key) as string);
   const file = new File(["image"], "pending.png", { type: "image/png" });
-  store.getState().addImages(ref, [{ id: "pending", name: "pending.png", mimeType: "image/png",
+  store.getState().addImages(ref, [{ type: "image", id: "pending", name: "pending.png", mimeType: "image/png",
     sizeBytes: file.size, file, previewUrl: "blob:pending" }]);
   store.getState().setPrompt(ref, "typing before debounce");
   const remote = { ...baseline, state: { ...baseline.state, draftsByThreadKey: {
