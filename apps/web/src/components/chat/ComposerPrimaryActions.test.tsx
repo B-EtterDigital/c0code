@@ -108,13 +108,14 @@ describe("ComposerPrimaryActions", () => {
     expect(renderPendingActions(false)).not.toContain('aria-label="Stop generation"');
   });
 
-  it("renders stage artwork inside the send button when artwork identification is active", () => {
+  it("keeps the send action cyan even when artwork identification is active", () => {
     stageArtworkState.mode = "artwork";
     stageArtworkState.variant = "nightly";
 
     const markup = renderSendButton();
 
-    expect(markup).toContain("stage-nightly");
+    expect(markup).toContain("bg-cyan-400");
+    expect(markup).not.toContain("stage-nightly");
   });
 
   it("hides stage artwork when artwork identification is inactive", () => {
@@ -130,6 +131,7 @@ describe("ComposerPrimaryActions", () => {
 
     expect(markup).toContain('aria-label="Stop generation"');
     expect(markup).not.toContain('aria-label="Send message"');
+    expect(markup).toContain('bg-orange-500');
   });
 
   it("renders send alongside stop while running when Enter-to-send is unavailable", () => {

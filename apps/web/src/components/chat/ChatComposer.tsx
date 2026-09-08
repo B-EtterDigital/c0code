@@ -910,7 +910,7 @@ const runtimeModeConfig: Record<
     icon: SparklesIcon,
   },
   "full-access": {
-    label: "Full access",
+    label: "Full",
     description: "Allow commands and edits without prompts.",
     icon: LockOpenIcon,
   },

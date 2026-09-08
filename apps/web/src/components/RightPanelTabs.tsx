@@ -1237,7 +1237,6 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       );
       const fromIndex = rects.findIndex((rect) => rect.id === surface.id);
       if (fromIndex < 0) return;
-      event.currentTarget.setPointerCapture(event.pointerId);
       updateTabDrag({
         pointerId: event.pointerId,
         surfaceId: surface.id,
@@ -1259,6 +1258,11 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       const current = tabDragRef.current;
       if (!current || current.pointerId !== event.pointerId || current.settling) return;
       const next = updateTabDragPointer(current, event.clientX, event.clientY);
+      // Capture only a drag. Capturing on pointer-down retargets an ordinary
+      // click to this wrapper, so the nested activation button never gets it.
+      if (next.dragging && !event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
       updateTabDrag(next);
       if (next.dragging) event.preventDefault();
     },
@@ -1389,7 +1393,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     >
       <div
         className={cn(
-          "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center border-slate-900/10 border-b pl-2 dark:border-white/[0.08]",
+          "flex h-[calc(var(--workspace-topbar-height)*1.3)] min-h-[calc(var(--workspace-topbar-height)*1.3)] shrink-0 items-end border-slate-900/10 border-b pb-1 pl-2 dark:border-white/[0.08]",
           // The sheet overlays from the viewport top, so its tab bar keeps
           // the titlebar's height: a compact row re-centers the layout
           // controls a few pixels higher and the cluster jumps on open.

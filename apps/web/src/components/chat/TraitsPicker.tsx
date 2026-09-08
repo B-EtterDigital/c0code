@@ -40,6 +40,7 @@ import {
 } from "./ComposerControl";
 import { composerFloatingLayerProps } from "./composerEventScope";
 import { useComposerMenuState } from "./useComposerMenuState";
+import { C0xEffortSlider } from '../c0x/C0xEffortSlider';
 
 type ProviderOptions = ReadonlyArray<ProviderOptionSelection>;
 
@@ -270,6 +271,7 @@ export function shouldRenderTraitsControls(input: {
 }
 
 export interface TraitsMenuContentProps {
+  presentation?: 'menu' | 'effort' | 'remaining';
   provider: ProviderDriverKind;
   instanceId?: ProviderInstanceId;
   models: ReadonlyArray<ServerProviderModel>;
@@ -294,6 +296,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
   modelOptions,
   allowPromptInjectedEffort = true,
   planModeEnabled,
+  presentation = 'menu',
   ...persistence
 }: TraitsMenuContentProps & TraitsPersistence) {
   const setProviderModelOptions = useComposerDraftStore((store) => store.setProviderModelOptions);
@@ -362,6 +365,20 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
     return null;
   }
 
+  const effortDescriptor = selectDescriptors.find((descriptor) =>
+    ['effort', 'reasoningEffort', 'variant'].includes(descriptor.id));
+  if (presentation === 'effort') {
+    if (!effortDescriptor) return null;
+    const value = ultrathinkPromptControlled && effortDescriptor.id === primarySelectDescriptor?.id
+      ? 'ultrathink' : String(getProviderOptionCurrentValue(effortDescriptor) ?? '');
+    return <C0xEffortSlider
+      options={effortDescriptor.options}
+      effort={value}
+      disabled={modelIsUnavailable || (ultrathinkInBodyText && effortDescriptor.id === primarySelectDescriptor?.id)}
+      onChange={(next) => handleSelectChange(effortDescriptor, next)}
+    />;
+  }
+
   if (modelIsUnavailable) {
     return (
       <>
@@ -386,7 +403,8 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
 
   return (
     <>
-      {selectDescriptors.map((descriptor, index) => {
+      {presentation === 'menu' && effortDescriptor ? <div className="px-2 py-2"><C0xEffortSlider options={effortDescriptor.options} effort={ultrathinkPromptControlled ? 'ultrathink' : String(getProviderOptionCurrentValue(effortDescriptor) ?? '')} disabled={ultrathinkInBodyText} onChange={(next) => handleSelectChange(effortDescriptor, next)} /></div> : null}
+      {selectDescriptors.filter((descriptor) => descriptor.id !== effortDescriptor?.id).map((descriptor, index) => {
         const selectedValue =
           ultrathinkPromptControlled && descriptor.id === primarySelectDescriptor?.id
             ? "ultrathink"
@@ -584,7 +602,7 @@ export const TraitsPicker = memo(function TraitsPicker({
 
   const { label: triggerLabel, showFastModeIcon } = buildTraitsTriggerDisplay({
     provider,
-    descriptors,
+    descriptors: descriptors.filter((descriptor) => !['effort', 'reasoningEffort', 'variant'].includes(descriptor.id)),
     primarySelectDescriptorId: primarySelectDescriptor?.id ?? null,
     ultrathinkPromptControlled,
   });
@@ -609,7 +627,16 @@ export const TraitsPicker = memo(function TraitsPicker({
   const isCodexStyle = provider === "codex";
 
   return (
-    <Menu
+    <div className="flex min-w-0 items-center gap-2">
+      <TraitsMenuContent
+        presentation="effort"
+        provider={provider}
+        {...(instanceId ? { instanceId } : {})}
+        models={models} model={model} prompt={prompt} onPromptChange={onPromptChange}
+        modelOptions={modelOptions} allowPromptInjectedEffort={allowPromptInjectedEffort}
+        planModeEnabled={planModeEnabled} {...persistence}
+      />
+    {descriptors.some((descriptor) => !['effort', 'reasoningEffort', 'variant'].includes(descriptor.id)) ? <Menu
       open={isMenuOpen}
       onOpenChange={(open) => {
         setIsMenuOpen(open);
@@ -649,6 +676,7 @@ export const TraitsPicker = memo(function TraitsPicker({
       </MenuTrigger>
       <MenuPopup align="start" {...(isComposerOwned ? composerFloatingLayerProps : {})}>
         <TraitsMenuContent
+          presentation="remaining"
           provider={provider}
           {...(instanceId ? { instanceId } : {})}
           models={models}
@@ -661,6 +689,7 @@ export const TraitsPicker = memo(function TraitsPicker({
           {...persistence}
         />
       </MenuPopup>
-    </Menu>
+    </Menu> : null}
+    </div>
   );
 });
