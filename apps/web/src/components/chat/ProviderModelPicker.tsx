@@ -88,6 +88,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const triggerLabel = selectedModel
     ? `${getTriggerDisplayModelLabel(selectedModel)}${selectedModel.isUnavailable ? " (Unavailable)" : ""}`
     : triggerTitle;
+  const compactTriggerTitle = triggerTitle.replace(/^(?:Anthropic\s+)?Claude\s+/i, "");
   const showInstanceBadge =
     activeEntry !== null && shouldShowInstanceBadge(activeEntry, props.instanceEntries);
 
@@ -206,7 +207,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 />
               }
             >
-              {triggerTitle}
+              {props.isComposerOwned && compactTriggerTitle !== triggerTitle ? <>
+                <span className="@max-[640px]/composer-surface:hidden">{triggerTitle}</span>
+                <span className="hidden @max-[640px]/composer-surface:inline">{compactTriggerTitle}</span>
+              </> : triggerTitle}
             </TooltipTrigger>
             <TooltipPopup side="top">{triggerLabel}</TooltipPopup>
           </Tooltip>

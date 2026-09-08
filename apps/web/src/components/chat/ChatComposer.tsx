@@ -4157,7 +4157,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         size={composerControlsInStrip ? "xs" : "sm"}
         triggerClassName={
           composerControlsInStrip
-            ? "min-w-13 shrink text-xs! @max-[640px]/composer-surface:[&_[data-chat-provider-model-picker-label]]:w-0 @max-[640px]/composer-surface:[&_[data-chat-provider-model-picker-label]]:flex-none"
+            ? "min-w-13 shrink text-xs! [&_[data-chat-provider-model-picker-label]]:max-w-32"
             : "-ms-2.5"
         }
         terminalOpen={terminalOpen}
