@@ -1,3 +1,4 @@
+import { useC0xShellConfig } from "~/c0x/nativeShell";
 import {
   type AssistantCitation,
   type EnvironmentId,
@@ -403,6 +404,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   topFadeEnabled = false,
   loadEarlier = null,
 }: MessagesTimelineProps) {
+  const c0xNavigation = useC0xShellConfig().modules.length > 0;
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
   const citationThreadRef = useMemo(() => parseScopedThreadKey(routeThreadKey), [routeThreadKey]);
   const expandCitedTurn = useCallback((turnId: TurnId) => {
@@ -716,11 +718,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
     const measure = () => {
       const viewportWidth = timelineViewportElement.getBoundingClientRect().width;
-      const nextHasPersistentGutter = resolveTimelineMinimapHasPersistentGutter(viewportWidth);
+      const nextHasPersistentGutter = c0xNavigation || resolveTimelineMinimapHasPersistentGutter(viewportWidth);
       setMinimapHasPersistentGutter((current) =>
         current === nextHasPersistentGutter ? current : nextHasPersistentGutter,
       );
-      setMinimapHitStripWidth(resolveTimelineMinimapHitStripWidth(viewportWidth));
+      setMinimapHitStripWidth(Math.max(c0xNavigation ? 24 : 0, resolveTimelineMinimapHitStripWidth(viewportWidth)));
       reportContentOverflow();
     };
 
@@ -733,7 +735,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [timelineViewportElement, rows.length, reportContentOverflow]);
+  }, [timelineViewportElement, rows.length, reportContentOverflow, c0xNavigation]);
 
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({
@@ -866,6 +868,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             className={cn(
               "scrollbar-gutter-both h-full min-h-0 overflow-x-hidden overscroll-y-contain px-3 [overflow-anchor:none] sm:px-5",
               topFadeEnabled && "topbar-scroll-fade",
+              c0xNavigation && "pl-12 sm:pl-12",
             )}
             ListHeaderComponent={
               loadEarlier !== null ? (
@@ -883,6 +886,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             ListFooterComponent={timelineListFooter}
           />
           <TimelineMinimap
+            alwaysVisible={c0xNavigation}
             items={minimapItems}
             hasPersistentGutter={minimapHasPersistentGutter}
             hitStripWidth={minimapHitStripWidth}
@@ -986,6 +990,7 @@ function timelineMinimapEventTargetsPreview(target: EventTarget): boolean {
 }
 
 function TimelineMinimap({
+  alwaysVisible = false,
   hasPersistentGutter,
   hitStripWidth,
   currentIndex,
@@ -993,6 +998,7 @@ function TimelineMinimap({
   stripMap,
   onSelect,
 }: {
+  alwaysVisible?: boolean;
   hasPersistentGutter: boolean;
   hitStripWidth: number;
   currentIndex: number | null;
@@ -1054,14 +1060,15 @@ function TimelineMinimap({
     [items.length],
   );
 
-  if (items.length < TIMELINE_MINIMAP_MIN_ITEMS) {
+  if (items.length < (alwaysVisible ? 1 : TIMELINE_MINIMAP_MIN_ITEMS)) {
     return null;
   }
 
   return (
     <div
       className={cn(
-        "group/minimap pointer-events-none absolute inset-y-0 left-0 z-40 hidden w-18 [@media(pointer:fine)]:block",
+        "group/minimap pointer-events-none absolute inset-y-0 left-0 z-40 w-18",
+        alwaysVisible ? "block" : "hidden [@media(pointer:fine)]:block",
         hasPersistentGutter
           ? "opacity-100"
           : "opacity-0 transition-opacity duration-150 hover:opacity-100 focus-within:opacity-100",
