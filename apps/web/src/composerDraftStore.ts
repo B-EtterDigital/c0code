@@ -57,6 +57,8 @@ import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { createDeferredStorage, createMemoryStorage } from "./lib/storage";
+import { createComposerStorage } from "./c0x/composerStorage";
+import { preserveLiveComposerDraft } from "./c0x/composerLiveDraft";
 import { getDefaultServerModel } from "./providerModels";
 import { UnifiedSettings } from "@t3tools/contracts/settings";
 import { ReviewCommentContextSchema, type ReviewCommentContext } from "./reviewCommentContext";
@@ -80,8 +82,11 @@ type ComposerPersistState =
   | { capturedState: ComposerDraftStoreState }
   | PersistedComposerDraftStoreState;
 
-const composerDebouncedStorage = createDeferredStorage<StorageValue<ComposerPersistState>>(
+const composerSharedStorage = createComposerStorage(
   typeof localStorage !== "undefined" ? localStorage : createMemoryStorage(),
+);
+const composerDebouncedStorage = createDeferredStorage<StorageValue<ComposerPersistState>>(
+  composerSharedStorage,
   (value) =>
     JSON.stringify({
       state:
@@ -4015,6 +4020,39 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
 );
 
 export const useComposerDraftStore = composerDraftStore;
+
+// Every embedded pane owns a store, but the browser storage belongs to their shared origin.
+// Merge pending local edits before applying a remote snapshot; never blindly rehydrate live Files.
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("storage", (event) => {
+    if (event.key !== COMPOSER_DRAFT_STORAGE_KEY || event.storageArea !== localStorage) return;
+    const current = composerDraftStore.getState();
+    const local = { state: partializeComposerDraftStoreState(current), version: COMPOSER_DRAFT_STORAGE_VERSION };
+    const merged = composerSharedStorage.receive(local, event.newValue) as
+      StorageValue<PersistedComposerDraftStoreState> | undefined;
+    if (JSON.stringify(merged) === JSON.stringify(local)) return;
+    const normalized = normalizeCurrentPersistedComposerDraftStoreState(merged?.state);
+    const draftsByThreadKey = Object.fromEntries(
+      Object.entries(normalized.draftsByThreadKey).map(([key, draft]) => [
+        key, JSON.stringify(draft) === JSON.stringify(local.state.draftsByThreadKey[key])
+          ? current.draftsByThreadKey[key]!
+          : preserveLiveComposerDraft(toHydratedThreadDraft(draft), current.draftsByThreadKey[key]),
+      ]),
+    );
+    // An image being converted to a data URL has no persisted representation yet.
+    for (const [key, draft] of Object.entries(current.draftsByThreadKey)) {
+      if (!draftsByThreadKey[key] && draft.nonPersistedImageIds.length > 0) draftsByThreadKey[key] = draft;
+    }
+    composerDraftStore.setState({
+      draftsByThreadKey,
+      draftThreadsByThreadKey: Object.fromEntries(Object.entries(normalized.draftThreadsByThreadKey)
+        .map(([key, draft]) => [key, toHydratedDraftThreadState(draft)])),
+      logicalProjectDraftThreadKeyByLogicalProjectKey: normalized.logicalProjectDraftThreadKeyByLogicalProjectKey,
+      stickyModelSelectionByProvider: normalized.stickyModelSelectionByProvider ?? {},
+      stickyActiveProvider: normalized.stickyActiveProvider ?? null,
+    });
+  });
+}
 
 export function beginBackgroundDraftSubmissionByRef(threadRef: ScopedThreadRef): void {
   const threadKey = scopedThreadKey(threadRef);
