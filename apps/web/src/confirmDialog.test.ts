@@ -26,6 +26,30 @@ describe("confirm dialog coordinator", () => {
     expect(readConfirmDialogState()).toEqual({ status: "idle" });
   });
 
+  it("remembers only an explicitly confirmed opt-out and keeps terminal consent separate", async () => {
+    const unregister = registerConfirmDialogHost();
+    const rememberKey = "test:module-close-confirmed";
+    const first = requireConfirmation(requestConfirmDialog("Close C0PACK?", { rememberKey }));
+    respondToConfirmDialog(false, true);
+    await expect(first).resolves.toBe(false);
+    completeConfirmDialogClose();
+    const second = requireConfirmation(requestConfirmDialog("Close C0PACK?", { rememberKey }));
+    expect(readConfirmDialogState().status).toBe("confirming");
+    respondToConfirmDialog(true, true);
+    await expect(second).resolves.toBe(true);
+    completeConfirmDialogClose();
+    await expect(requestConfirmDialog("Close C0DIC?", { rememberKey })).resolves.toBe(true);
+    expect(readConfirmDialogState().status).toBe("idle");
+    const terminal = requireConfirmation(requestConfirmDialog("Close terminal?", {
+      rememberKey: "test:terminal-close-confirmed",
+    }));
+    expect(readConfirmDialogState().status).toBe("confirming");
+    respondToConfirmDialog(false);
+    await expect(terminal).resolves.toBe(false);
+    completeConfirmDialogClose();
+    unregister();
+  });
+
   it("resolves a displayed confirmation and waits for its close transition", async () => {
     const unregister = registerConfirmDialogHost();
     const confirmation = requireConfirmation(

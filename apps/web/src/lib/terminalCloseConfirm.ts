@@ -32,7 +32,12 @@ export async function confirmTerminalClose(
               .map((label) => `"${label}"`)
               .join(", ")}.`,
           ].join("\n"),
-      { variant: "destructive" },
+      {
+        variant: "destructive",
+        ...(typeof window !== "undefined" && window.__c0xNativeBuild
+          ? { rememberKey: "c0x:skip-terminal-close-confirmation:v1" }
+          : {}),
+      },
     );
   } catch {
     return false;

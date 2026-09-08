@@ -1,4 +1,6 @@
 import type { ConfirmDialogOptions, ConfirmDialogVariant } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
 
 export type ConfirmDialogState =
   | { readonly status: "idle" }
@@ -6,16 +8,19 @@ export type ConfirmDialogState =
       readonly status: "confirming";
       readonly message: string;
       readonly variant: ConfirmDialogVariant;
+      readonly rememberKey?: string;
     }
   | {
       readonly status: "closing";
       readonly message: string;
       readonly variant: ConfirmDialogVariant;
+      readonly rememberKey?: string;
     };
 
 type PendingConfirmation = {
   readonly message: string;
   readonly variant: ConfirmDialogVariant;
+  readonly rememberKey?: string;
   readonly resolve: (confirmed: boolean) => void;
 };
 
@@ -79,14 +84,18 @@ export function registerConfirmDialogHost(): () => void {
  */
 export function requestConfirmDialog(
   message: string,
-  options?: ConfirmDialogOptions,
+  options?: ConfirmDialogOptions & { rememberKey?: string },
 ): Promise<boolean> | undefined {
+  if (options?.rememberKey && getLocalStorageItem(options.rememberKey, Schema.Boolean) === true) {
+    return Promise.resolve(true);
+  }
   if (registeredHostCount === 0) return undefined;
 
   const confirmation = new Promise<boolean>((resolve) => {
     const pending = {
       message,
       variant: options?.variant ?? "default",
+      ...(options?.rememberKey ? { rememberKey: options.rememberKey } : {}),
       resolve,
     } satisfies PendingConfirmation;
     if (activeConfirmation || state.status === "closing") {
@@ -95,16 +104,20 @@ export function requestConfirmDialog(
     }
 
     activeConfirmation = pending;
-    publish({ status: "confirming", message, variant: pending.variant });
+    publish({ status: "confirming", message, variant: pending.variant,
+      ...(pending.rememberKey ? { rememberKey: pending.rememberKey } : {}) });
   });
 
   return confirmation;
 }
 
-export function respondToConfirmDialog(confirmed: boolean): void {
+export function respondToConfirmDialog(confirmed: boolean, remember = false): void {
   if (state.status !== "confirming" || !activeConfirmation) return;
 
   const confirmation = activeConfirmation;
+  if (confirmed && remember && confirmation.rememberKey) {
+    setLocalStorageItem(confirmation.rememberKey, true, Schema.Boolean);
+  }
   activeConfirmation = null;
   confirmation.resolve(confirmed);
   publish({ status: "closing", message: state.message, variant: state.variant });
@@ -120,7 +133,8 @@ export function completeConfirmDialogClose(): void {
   }
 
   activeConfirmation = next;
-  publish({ status: "confirming", message: next.message, variant: next.variant });
+  publish({ status: "confirming", message: next.message, variant: next.variant,
+    ...(next.rememberKey ? { rememberKey: next.rememberKey } : {}) });
 }
 
 export function resetConfirmDialogForTests(): void {

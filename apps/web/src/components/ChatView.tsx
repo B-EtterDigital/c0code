@@ -199,7 +199,8 @@ import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs } from "./RightPanelTabs";
 import { C0xModuleSurface } from "./c0x/C0xModuleSurface";
-import { registerC0xModuleOpener } from "~/c0x/nativeShell";
+import { c0xModuleById, registerC0xModuleOpener } from "~/c0x/nativeShell";
+import { requestConfirmDialog } from "~/confirmDialog";
 import { useC0xComposer } from "~/c0x/composer";
 import { AgentsPanel } from "./AgentsPanel";
 import {
@@ -4527,6 +4528,13 @@ export default function ChatView(props: ChatViewProps) {
     (surface: RightPanelSurface) => {
       if (!activeThreadRef) return;
       const finishClose = () => finishRightPanelSurfaceClose([surface]);
+      if (surface.kind === "c0x-module") {
+        const title = c0xModuleById(surface.moduleId)?.title ?? "module";
+        void requestConfirmDialog(`Close ${title}?\nThis closes the module tab.`, {
+          rememberKey: "c0x:skip-module-close-confirmation:v1",
+        })?.then((confirmed) => { if (confirmed) finishClose(); });
+        return;
+      }
       if (surface.kind === "preview") {
         closeAfterAgentBrowserConfirmation([surface], finishClose);
         return;

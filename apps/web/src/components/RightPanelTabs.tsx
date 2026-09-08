@@ -807,19 +807,21 @@ function RightPanelEmptyState(props: {
       )}
     >
       {hasShellContent ? (
-        <div className="my-auto w-full max-w-lg shrink-0">
+        <div className="flex min-h-full w-full max-w-lg shrink-0 flex-col gap-6" data-c0x-launcher-sections>
           {shellConfig.smarch ? (
-            <div className="mb-6">
+            <div className="shrink-0" data-c0x-launcher-section="smarch">
               <C0xSmarchSection smarch={shellConfig.smarch} />
             </div>
           ) : null}
-          <div className="mb-5 text-center">{launcherHeading}</div>
-          {surfaceCards}
+          <div className="flex flex-1 flex-col justify-center" data-c0x-launcher-section="surfaces">
+            <div className="mb-5 text-center">{launcherHeading}</div>
+            {surfaceCards}
+          </div>
           {moduleActions.length > 0 ? (
-            <>
-              <h3 className="mt-6 font-medium text-foreground text-sm">C0VIBE modules</h3>
+            <div className="shrink-0" data-c0x-launcher-section="modules">
+              <h3 className="font-medium text-foreground text-sm">C0VIBE modules</h3>
               <div className="mt-2 grid grid-cols-2 gap-2">{moduleActions.map(renderAction)}</div>
-            </>
+            </div>
           ) : null}
         </div>
       ) : (

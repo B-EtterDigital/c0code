@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import {
   completeConfirmDialogClose,
@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 
 type ConfirmationCopy = {
   readonly title: string;
@@ -59,11 +60,13 @@ export function ConfirmDialogHost() {
   );
 
   useEffect(() => registerConfirmDialogHost(), []);
+  const [remember, setRemember] = useState(false);
+  useEffect(() => { setRemember(false); }, [state]);
 
   const copy = resolveConfirmDialogCopy(state.status === "idle" ? "" : state.message);
   const confirmVariant = state.status === "idle" ? "default" : state.variant;
   const onCancel = () => respondToConfirmDialog(false);
-  const onConfirm = () => respondToConfirmDialog(true);
+  const onConfirm = () => respondToConfirmDialog(true, remember);
 
   return (
     <AlertDialog
@@ -84,6 +87,12 @@ export function ConfirmDialogHost() {
             </AlertDialogDescription>
           ) : null}
         </AlertDialogHeader>
+        {state.status === "confirming" && state.rememberKey ? (
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Checkbox checked={remember} onCheckedChange={setRemember} />
+            Do not ask me again
+          </label>
+        ) : null}
         <AlertDialogFooter>
           <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
           <Button variant={confirmVariant} onClick={onConfirm}>
