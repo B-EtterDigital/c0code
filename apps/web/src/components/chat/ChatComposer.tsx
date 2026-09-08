@@ -1245,6 +1245,7 @@ export interface ChatComposerProps {
   routeKind: "server" | "draft";
   routeThreadRef: ScopedThreadRef;
   fluidQueueThreadKey: string;
+  fluidQueueLatestTurn?: import("@t3tools/contracts").OrchestrationLatestTurn | null | undefined;
   draftId: DraftId | null;
 
   // Thread context
@@ -1398,6 +1399,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     routeKind,
     routeThreadRef,
     fluidQueueThreadKey,
+    fluidQueueLatestTurn,
     draftId,
     activeThreadId,
     activeThreadEnvironmentId: _activeThreadEnvironmentId,
@@ -5208,6 +5210,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       </ComposerBanner.Dock>
       <FluidQueueRows
         threadKey={fluidQueueThreadKey}
+        latestTurn={fluidQueueLatestTurn}
         phase={phase}
         onDispatch={onDispatchFluidQueueEntry}
         onEdit={editFluidQueueEntry}

@@ -213,6 +213,7 @@ import {
   fluidQueueEntryStillMatchesDraft,
   hydrateFluidQueueEntry,
   readFluidQueueState,
+  recordFluidQueueTurnRequest,
   removeFluidQueueEntry,
   restoreFluidQueueEntry,
   type FluidQueueEntry,
@@ -7132,6 +7133,7 @@ export default function ChatView(props: ChatViewProps) {
       if (backgroundThreadRef) {
         beginBackgroundDraftSubmissionByRef(backgroundThreadRef);
       }
+      if (queuedEntry) await recordFluidQueueTurnRequest(routeThreadKey, queuedEntry.id, messageCreatedAt);
       const startResult = await startThreadTurn({
         environmentId,
         input: {
@@ -8548,6 +8550,7 @@ export default function ChatView(props: ChatViewProps) {
                             routeKind={routeKind}
                             routeThreadRef={routeThreadRef}
                             fluidQueueThreadKey={routeThreadKey}
+                            fluidQueueLatestTurn={activeLatestTurn}
                             draftId={draftId}
                             activeThreadId={activeThreadId}
                             activeThreadEnvironmentId={activeThread?.environmentId}

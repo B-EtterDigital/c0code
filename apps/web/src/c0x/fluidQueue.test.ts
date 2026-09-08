@@ -4,6 +4,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   ThreadId,
+  TurnId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -204,8 +205,16 @@ describe("fluid steering queue", () => {
       }),
     ).toBe("busy");
 
-    await queue.reconcileFluidQueuePhase(threadKey, true);
-    await queue.reconcileFluidQueuePhase(threadKey, false);
+    const requestedAt = "2026-09-09T00:00:01.000Z";
+    await queue.recordFluidQueueTurnRequest(threadKey, first.id, requestedAt);
+    const running = { turnId: TurnId.make("accepted-queued-turn"), requestedAt,
+      state: "running" as const, startedAt: requestedAt, completedAt: null, assistantMessageId: null };
+    await queue.reconcileFluidQueuePhase(threadKey, running);
+    // A second window still showing the previous completed turn cannot release this claim.
+    await queue.reconcileFluidQueuePhase(threadKey, { ...running, requestedAt: "2026-09-09T00:00:00.000Z",
+      state: "completed", completedAt: requestedAt });
+    expect(queue.readFluidQueueState().claimsByThreadKey[threadKey]).toBeDefined();
+    await queue.reconcileFluidQueuePhase(threadKey, { ...running, state: "completed", completedAt: "2026-09-09T00:00:02.000Z" });
     expect(
       await queue.dispatchFluidQueueEntry({
         threadKey,

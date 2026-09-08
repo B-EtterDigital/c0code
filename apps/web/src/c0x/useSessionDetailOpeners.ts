@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { ChatFileAttachment, EnvironmentId, ScopedThreadRef } from '@t3tools/contracts';
 import { useOpenLink } from '../browser/useOpenLink';
-import type { ChatAttachment } from '../types';
+import { isFileAttachment, isImageAttachment, type ChatAttachment } from '../types';
 import type { ExpandedImagePreview } from '../components/chat/ExpandedImagePreview';
 import { postC0xShellEvent } from './nativeShell';
 import { sessionFileRelativePath } from './sessionDetailsSurface';
@@ -29,13 +29,18 @@ export function useSessionDetailOpeners(input: {
       message: 'The recorded file is outside this conversation workspace.' });
   }, [workspaceRoot, openFile]);
   const onOpenAttachment = useCallback((attachment: ChatAttachment) => {
-    if (attachment.type === 'file') {
+    if (isFileAttachment(attachment)) {
       openFileAttachment(attachment);
+      return;
+    }
+    if (!isImageAttachment(attachment)) {
+      postC0xShellEvent({ type: 'session-details-error', operation: 'open-attachment',
+        message: 'This recorded attachment type is not supported.' });
       return;
     }
     openImage({ index: 0, images: [{
       src: attachment.previewUrl ?? null, name: attachment.name,
-      actionsSource: { kind: 'image', name: attachment.name, asset: {
+      actionsSource: { kind: 'image', name: attachment.name, src: attachment.previewUrl ?? null, asset: {
         environmentId, resource: { _tag: 'attachment', attachmentId: attachment.id,
           fileName: attachment.name, mimeType: attachment.mimeType },
       } },

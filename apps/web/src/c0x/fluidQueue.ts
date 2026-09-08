@@ -5,6 +5,7 @@ import type {
   ProviderInteractionMode,
   RuntimeMode,
   ScopedThreadRef,
+  OrchestrationLatestTurn,
   ServerProvider,
 } from "@t3tools/contracts";
 import { useSyncExternalStore } from "react";
@@ -23,7 +24,6 @@ import {
 import { postC0xShellEvent } from "./nativeShell";
 
 export const FLUID_QUEUE_STORAGE_KEY = "t3code:c0x-fluid-queue:v1";
-export const FLUID_QUEUE_DISPATCH_START_TIMEOUT_MS = 15_000;
 
 const FLUID_QUEUE_VERSION = 1;
 
@@ -65,6 +65,7 @@ interface FluidQueueDispatchClaim {
   mode: "automatic" | "steer";
   startedAt: number;
   sawRunning: boolean;
+  requestedAt?: string;
 }
 
 export interface FluidQueueState {
@@ -530,15 +531,23 @@ export async function dispatchFluidQueueEntry(input: {
   return result ?? "busy";
 }
 
-export async function reconcileFluidQueuePhase(threadKey: string, running: boolean): Promise<void> {
+export async function recordFluidQueueTurnRequest(threadKey: string, entryId: string, requestedAt: string): Promise<void> {
   await writeState((state) => {
     const claim = state.claimsByThreadKey[threadKey];
-    if (!claim) return null;
+    if (!claim || claim.entryId !== entryId) return null;
+    return { ...state, claimsByThreadKey: { ...state.claimsByThreadKey, [threadKey]: { ...claim, requestedAt } } };
+  });
+}
+
+export async function reconcileFluidQueuePhase(threadKey: string, latestTurn: OrchestrationLatestTurn | null | undefined): Promise<void> {
+  if (!latestTurn) return;
+  await writeState((state) => {
+    const claim = state.claimsByThreadKey[threadKey];
+    if (!claim?.requestedAt || Date.parse(latestTurn.requestedAt) < Date.parse(claim.requestedAt)) return null;
     const claims = { ...state.claimsByThreadKey };
-    if (running && !claim.sawRunning) {
+    if (latestTurn.state === "running" && !claim.sawRunning) {
       claims[threadKey] = { ...claim, sawRunning: true };
-    } else if (!running && (claim.sawRunning ||
-      Date.now() - claim.startedAt >= FLUID_QUEUE_DISPATCH_START_TIMEOUT_MS)) {
+    } else if (latestTurn.state !== "running" && latestTurn.completedAt !== null) {
       delete claims[threadKey];
     } else return null;
     return { enabled: state.enabled, entries: state.entries, claimsByThreadKey: claims };

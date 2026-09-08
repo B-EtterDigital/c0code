@@ -10,7 +10,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   dispatchFluidQueueEntry,
-  FLUID_QUEUE_DISPATCH_START_TIMEOUT_MS,
   fluidQueueEntryLabel,
   hydrateFluidQueueEntry,
   reconcileFluidQueuePhase,
@@ -28,6 +27,7 @@ import { composerFloatingLayerProps } from "./composerEventScope";
 import "./FluidQueueRows.css";
 
 interface FluidQueueRowsProps {
+  latestTurn?: import("@t3tools/contracts").OrchestrationLatestTurn | null | undefined;
   threadKey: string;
   phase: SessionPhase;
   onDispatch: (entry: FluidQueueEntry) => Promise<boolean>;
@@ -51,15 +51,8 @@ export function FluidQueueRows(props: FluidQueueRowsProps) {
   const claim = state.claimsByThreadKey[props.threadKey] ?? null;
 
   useEffect(() => {
-    void reconcileFluidQueuePhase(props.threadKey, props.phase === "running");
-    if (props.phase !== "ready" || !claim || claim.sawRunning) return;
-    const remaining = claim.startedAt + FLUID_QUEUE_DISPATCH_START_TIMEOUT_MS - Date.now();
-    const timeout = window.setTimeout(
-      () => reconcileFluidQueuePhase(props.threadKey, false),
-      Math.max(0, remaining) + 1,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [claim, props.phase, props.threadKey]);
+    void reconcileFluidQueuePhase(props.threadKey, props.latestTurn);
+  }, [claim, props.latestTurn, props.threadKey]);
 
   useEffect(() => {
     const first = entries[0];
