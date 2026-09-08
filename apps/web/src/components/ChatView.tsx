@@ -200,6 +200,7 @@ import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavaila
 import { RightPanelTabs } from "./RightPanelTabs";
 import { C0xModuleSurface } from "./c0x/C0xModuleSurface";
 import { registerC0xModuleOpener } from "~/c0x/nativeShell";
+import { useC0xComposer } from "~/c0x/composer";
 import { AgentsPanel } from "./AgentsPanel";
 import {
   deriveAgentPanelModel,
@@ -4125,6 +4126,7 @@ export default function ChatView(props: ChatViewProps) {
   // The shell drives module opens (shortcuts, rail triggers) through the
   // registered hook — this view owns the thread ref the surface needs.
   useEffect(() => registerC0xModuleOpener(openC0xModuleSurface), [openC0xModuleSurface]);
+  useC0xComposer(composerDraftTarget, scheduleComposerFocus);
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
