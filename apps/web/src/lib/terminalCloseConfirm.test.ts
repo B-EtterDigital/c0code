@@ -20,6 +20,7 @@ import { confirmTerminalClose, isTerminalCloseConfirmPending } from "./terminalC
 
 describe("terminal close confirmation", () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     confirmMock.mockReset();
     readLocalApiMock.mockReset();
     readLocalApiMock.mockReturnValue({ dialogs: { confirm: confirmMock } });
@@ -74,5 +75,16 @@ describe("terminal close confirmation", () => {
 
     await expect(confirmTerminalClose(["Terminal 1"])).resolves.toBe(true);
     expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("offers a terminal-specific remembered choice in the C0X runtime", async () => {
+    vi.stubGlobal("window", { __c0xNativeBuild: true });
+    confirmMock.mockResolvedValue(true);
+    await expect(confirmTerminalClose(["Terminal 1"])).resolves.toBe(true);
+    expect(confirmMock).toHaveBeenCalledWith(expect.any(String), {
+      variant: "destructive",
+      rememberKey: "c0x:skip-terminal-close-confirmation:v1",
+    });
+    vi.unstubAllGlobals();
   });
 });
