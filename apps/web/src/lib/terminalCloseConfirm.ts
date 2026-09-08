@@ -39,7 +39,8 @@ export async function confirmTerminalClose(
           : {}),
       },
     );
-  } catch {
+  } catch (error) {
+    console.error(`[c0x-t3-error] terminal close confirmation: ${String(error)}`);
     return false;
   } finally {
     pendingConfirmations -= 1;

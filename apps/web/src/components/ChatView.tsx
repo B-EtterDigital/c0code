@@ -4483,19 +4483,30 @@ export default function ChatView(props: ChatViewProps) {
   );
   const closeAfterAgentBrowserConfirmation = useCallback(
     (surfaces: readonly RightPanelSurface[], closeSurfaces: () => void) => {
+      const finishAfterModuleConfirmation = () => {
+        const titles = surfaces.flatMap((surface) => surface.kind === "c0x-module"
+          ? [c0xModuleById(surface.moduleId)?.title ?? "module"] : []);
+        if (titles.length === 0) {
+          closeSurfaces();
+          return;
+        }
+        void requestConfirmDialog(`Close ${titles.join(", ")}?\nThis closes the module tabs.`, {
+          rememberKey: "c0x:skip-module-close-confirmation:v1",
+        })?.then((confirmed) => { if (confirmed) closeSurfaces(); });
+      };
       const message = agentControlledBrowserCloseConfirmation(
         surfaces,
         activePreviewState.desktopByTabId,
       );
       if (!message) {
-        closeSurfaces();
+        finishAfterModuleConfirmation();
         return;
       }
       const localApi = readLocalApi();
       if (!localApi) return;
       void localApi.dialogs.confirm(message, { variant: "destructive" }).then(
         (confirmed) => {
-          if (confirmed) closeSurfaces();
+          if (confirmed) finishAfterModuleConfirmation();
         },
         () => undefined,
       );
@@ -4529,10 +4540,7 @@ export default function ChatView(props: ChatViewProps) {
       if (!activeThreadRef) return;
       const finishClose = () => finishRightPanelSurfaceClose([surface]);
       if (surface.kind === "c0x-module") {
-        const title = c0xModuleById(surface.moduleId)?.title ?? "module";
-        void requestConfirmDialog(`Close ${title}?\nThis closes the module tab.`, {
-          rememberKey: "c0x:skip-module-close-confirmation:v1",
-        })?.then((confirmed) => { if (confirmed) finishClose(); });
+        closeAfterAgentBrowserConfirmation([surface], finishClose);
         return;
       }
       if (surface.kind === "preview") {
