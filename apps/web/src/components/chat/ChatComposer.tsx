@@ -1,4 +1,6 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
+import { C0xComposerMediaControls } from "../c0x/C0xComposerMediaControls";
+import { useC0xComposerMedia } from "../../c0x/composerMedia";
 import {
   questionAttachmentDraftId,
   useQuestionAttachmentPreparation,
@@ -1488,6 +1490,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // Store subscriptions (prompt / images / terminal contexts)
   // ------------------------------------------------------------------
   const composerDraft = useComposerThreadDraft(composerDraftTarget);
+  const composerMedia = useC0xComposerMedia(composerTargetKey(composerDraftTarget));
   // Live target key, for async flows that must notice a thread switch that
   // happened while they awaited.
   const composerDraftTargetKeyRef = useRef("");
@@ -4127,7 +4130,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const hiddenRestingBlockIds = restingBlockDefs
     .slice(restingBlockDefs.length - restingHiddenBlockCount)
     .map((def) => def.id);
-  const composerControls = noProviderAvailable ? (
+  const modelAndModeControls = noProviderAvailable ? (
     <Button
       type="button"
       size="sm"
@@ -4153,6 +4156,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           data-resting-controls-separator="true"
         />
       ) : null}
+      <div className={composerMedia.enabled ? "order-last ms-auto min-w-0 shrink-0" : "contents"}>
       <ProviderModelPicker
         isComposerOwned
         compact={composerControlsCompact}
@@ -4190,6 +4194,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         onInstanceModelChange={onProviderModelSelect}
         onOpenProviderSetup={onOpenProviderSetup}
       />
+      </div>
 
       {composerControlsCompact ? (
         <CompactComposerControlsMenu
@@ -4250,6 +4255,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           ) : null}
         </>
       )}
+    </>
+  );
+  const composerControls = (
+    <>
+      {composerMedia.enabled ? <C0xComposerMediaControls state={composerMedia.state}
+        onAction={composerMedia.onAction} onPreferencesChange={composerMedia.onPreferencesChange} /> : null}
+      {modelAndModeControls}
     </>
   );
   const showTasksTab =

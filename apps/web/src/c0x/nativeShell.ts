@@ -16,6 +16,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { C0X_SESSION_DETAILS_SURFACE } from './sessionDetailsSurface';
+import type { C0xComposerMediaRequest } from './composerMedia';
 
 export const C0X_SHELL_CONFIG_EVENT = "c0x-shell-config";
 
@@ -174,6 +175,8 @@ export function c0xModuleById(moduleId: string): C0xModuleDescriptor | null {
 }
 
 export type C0xShellEvent =
+  | C0xComposerMediaRequest
+  | { type: "composer-media-error"; operation: string; message: string }
   | { type: "session-details-error"; operation: string; message: string }
   | { type: "smarch-set"; key: string; enabled: boolean }
   | { type: "smarch-announce" }

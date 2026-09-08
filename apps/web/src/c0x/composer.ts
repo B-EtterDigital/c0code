@@ -1,13 +1,15 @@
 import { useEffect } from "react";
-import { hydrateImagesFromPersisted, useComposerDraftStore, type ComposerThreadTarget } from "~/composerDraftStore";
+import { composerTargetKey, hydrateImagesFromPersisted, useComposerDraftStore, type ComposerThreadTarget } from "~/composerDraftStore";
+import { recordC0xComposerMedia } from './composerMediaReceipts';
 
 export type C0xComposerInsertResult = "inserted" | "already-present" | "empty";
-type C0xComposerImage = { dataUrl: string; name: string; mimeType: string; sizeBytes: number };
+type C0xComposerImage = { dataUrl: string; name: string; mimeType: string; sizeBytes: number; mediaId?: string };
 
 declare global {
   interface Window {
     __c0xComposer?: {
-      insert(text: string): C0xComposerInsertResult;
+      readonly targetKey: string;
+      insert(text: string, mediaId?: string): C0xComposerInsertResult;
       attach(images: C0xComposerImage[]): string[];
       focus(): void;
     };
@@ -17,13 +19,15 @@ declare global {
 /** Draft-only extension: T3 continues to own the editor, persistence and send. */
 export function registerC0xComposer(target: ComposerThreadTarget, focus: () => void): () => void {
   const api = {
-    insert(text: string): C0xComposerInsertResult {
+    targetKey: composerTargetKey(target),
+    insert(text: string, mediaId?: string): C0xComposerInsertResult {
       if (typeof text !== "string" || !text.trim()) return "empty";
       const store = useComposerDraftStore.getState();
       const draft = store.getComposerDraft(target)?.prompt ?? "";
       if (draft.includes(text)) return "already-present";
       const space = draft.length > 0 && !/\s$/.test(draft) ? " " : "";
       store.setPrompt(target, `${draft}${space}${text} `);
+      recordC0xComposerMedia(mediaId, { targetKey: api.targetKey, text });
       focus();
       return "inserted";
     },
@@ -36,6 +40,9 @@ export function registerC0xComposer(target: ComposerThreadTarget, focus: () => v
         const hydrated = hydrateImagesFromPersisted([{ ...image, id }]);
         if (hydrated.length !== 1) return "invalid-data-url";
         store.addImages(target, hydrated);
+        if (useComposerDraftStore.getState().getComposerDraft(target)?.images.some((entry) => entry.id === id)) {
+          recordC0xComposerMedia(image.mediaId, { targetKey: api.targetKey, imageId: id });
+        }
         return useComposerDraftStore.getState().getComposerDraft(target)?.images.some((entry) => entry.id === id)
           ? "attached" : "attachment-limit";
       });

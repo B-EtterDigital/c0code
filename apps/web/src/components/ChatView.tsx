@@ -204,6 +204,7 @@ import { C0xSessionDetailsToggle } from './c0x/C0xSessionDetailsToggle';
 import { C0X_SESSION_DETAILS_ID } from '~/c0x/sessionDetailsSurface';
 import { useSessionDetailOpeners } from '~/c0x/useSessionDetailOpeners';
 import { c0xModuleById, postC0xShellEvent, registerC0xModuleOpener } from "~/c0x/nativeShell";
+import { snapshotC0xComposerMediaSubmission, acknowledgeC0xComposerMediaSubmission } from '~/c0x/composerMediaReceipts';
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useC0xComposer } from "~/c0x/composer";
 import { useC0xAgentSessionImport } from "~/c0x/agentSessions";
@@ -6810,6 +6811,7 @@ export default function ChatView(props: ChatViewProps) {
     }
 
     const composerImagesSnapshot = [...composerImages];
+    const mediaSubmissionReceipt = snapshotC0xComposerMediaSubmission(composerDraftTarget, promptForSend, composerImagesSnapshot);
     const composerFilesSnapshot = [...composerFiles];
     const composerAttachmentsSnapshot = [...composerImagesSnapshot, ...composerFilesSnapshot];
     const composerTerminalContextsSnapshot = [...sendableComposerTerminalContexts];
@@ -7159,6 +7161,7 @@ export default function ChatView(props: ChatViewProps) {
         failure = startResult;
       } else {
         turnStartSucceeded = true;
+        acknowledgeC0xComposerMediaSubmission(mediaSubmissionReceipt);
         // The turn is under way and will spend quota, so that thread's limits
         // snapshot is stale. Uploads may have outlasted a navigation, so only
         // the sending thread's panel clears.
