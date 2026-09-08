@@ -200,6 +200,7 @@ import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavaila
 import { RightPanelTabs } from "./RightPanelTabs";
 import { C0xModuleSurface } from "./c0x/C0xModuleSurface";
 import { C0xSessionPanel } from './c0x/C0xSessionPanel';
+import { C0xSessionDetailsToggle } from './c0x/C0xSessionDetailsToggle';
 import { C0X_SESSION_DETAILS_ID } from '~/c0x/sessionDetailsSurface';
 import { useSessionDetailOpeners } from '~/c0x/useSessionDetailOpeners';
 import { c0xModuleById, postC0xShellEvent, registerC0xModuleOpener } from "~/c0x/nativeShell";
@@ -8119,6 +8120,12 @@ export default function ChatView(props: ChatViewProps) {
 
   const panelToggleControls = (
     <PanelLayoutControls
+      sessionDetailsControl={c0xModuleById(C0X_SESSION_DETAILS_ID) ? (
+        <C0xSessionDetailsToggle key={routeThreadKey} thread={activeThread} plan={activePlan}
+          messages={timelineMessages} activities={threadActivities}
+          workspaceRoot={activeWorkspaceRoot} branch={activeThread.branch}
+          onOpenGit={isGitRepo ? addDiffSurface : undefined} {...sessionDetailOpeners} />
+      ) : undefined}
       terminalAvailable={activeProject !== null}
       terminalOpen={terminalUiState.terminalOpen}
       terminalShortcutLabel={shortcutLabelForCommand(keybindings, "terminal.toggle")}
@@ -8250,7 +8257,7 @@ export default function ChatView(props: ChatViewProps) {
       // C0X patch: a measurable host node — the C0VIBE shell projects the
       // module UI onto this surface's rect.
       renderedRightPanelSurface.moduleId === C0X_SESSION_DETAILS_ID ? (
-        <C0xSessionPanel key={routeThreadKey} thread={activeThread}
+        <C0xSessionPanel key={routeThreadKey} thread={activeThread} plan={activePlan}
           messages={timelineMessages} activities={threadActivities}
           workspaceRoot={activeWorkspaceRoot} branch={activeThread.branch}
           onOpenGit={isGitRepo ? addDiffSurface : undefined} {...sessionDetailOpeners} />

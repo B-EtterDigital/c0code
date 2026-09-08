@@ -9,6 +9,7 @@
  *
  * @module ProviderServiceLive
  */
+import { withC0CodeTaskInstructions } from "../c0xTaskInstructions.ts";
 import {
   EventId,
   MessageId,
@@ -1519,7 +1520,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     // sends generic files as file parts, the others send images only and rely
     // on the path line for everything else. Unresolvable ids are skipped here
     // and surface as adapter errors when the file is read.
-    let inputTextWithAttachmentContext = inputTextWithCitations;
+    let inputTextWithAttachmentContext = withC0CodeTaskInstructions(
+      inputTextWithCitations,
+      process.env.C0CODE_HARNESS_TASKS === "1",
+    );
     const appendAttachmentContext = (context: string | undefined) => {
       if (context === undefined) return;
       const candidate = inputTextWithAttachmentContext

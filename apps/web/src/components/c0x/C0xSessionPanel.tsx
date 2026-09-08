@@ -1,13 +1,17 @@
 import { useState } from 'react';
+import type { ActivePlanState } from '~/session-logic';
+import { C0xSessionTasks } from './C0xSessionTasks';
 import { C0xSessionDetailsView, C0xSessionSummary, type C0xSessionDetailsViewProps } from './C0xSessionDetails';
 
 export function C0xSessionPanel(props: C0xSessionDetailsViewProps & {
   workspaceRoot?: string | null | undefined;
   branch?: string | null | undefined;
   onOpenGit?: (() => void) | undefined;
+  plan?: ActivePlanState | null | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
   return <div className="flex h-full min-h-0 flex-col bg-white text-zinc-900 dark:bg-[#181818] dark:text-zinc-100">
+    <C0xSessionTasks plan={props.plan} />
     <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
       <span className="text-sm font-medium">Session</span>
       {expanded ? <button type="button" className="text-xs text-zinc-600 dark:text-zinc-400" onClick={() => setExpanded(false)}>Overview</button> : null}
