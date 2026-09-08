@@ -5,6 +5,7 @@
  */
 import {
   Boxes,
+  FileText,
   Camera,
   Globe,
   MessageSquare,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 
 const C0X_MODULE_ICONS: Record<string, LucideIcon> = {
+  'file-text': FileText,
   boxes: Boxes,
   camera: Camera,
   globe: Globe,

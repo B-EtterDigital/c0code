@@ -26,8 +26,6 @@ export const FLUID_QUEUE_STORAGE_KEY = "t3code:c0x-fluid-queue:v1";
 export const FLUID_QUEUE_DISPATCH_START_TIMEOUT_MS = 15_000;
 
 const FLUID_QUEUE_VERSION = 1;
-const FALLBACK_LOCK_TTL_MS = 60_000;
-const FALLBACK_LOCK_PREFIX = `${FLUID_QUEUE_STORAGE_KEY}:lock:`;
 
 type QueueProviderModel = ServerProvider["models"][number];
 
@@ -195,17 +193,23 @@ function emit(): void {
   for (const listener of listeners) listener();
 }
 
-function writeState(
-  update: (state: FluidQueueState) => Omit<FluidQueueState, "version" | "revision">,
-): FluidQueueState | null {
+async function writeState(
+  update: (state: FluidQueueState) => Omit<FluidQueueState, "version" | "revision"> | null,
+): Promise<FluidQueueState | null> {
+  return withDispatchLock('state', async () => {
   const current = readFluidQueueState();
   const updated = update(current);
+  if (!updated) return null;
   const next: FluidQueueState = {
     ...updated,
     version: FLUID_QUEUE_VERSION,
     revision: current.revision + 1,
   };
   const target = storage();
+  if (!target) {
+    reportQueueError('write-storage', new Error('Persistent queue storage is unavailable.'));
+    return null;
+  }
   if (target) {
     try {
       const raw = JSON.stringify(next);
@@ -221,6 +225,7 @@ function writeState(
   cachedState = next;
   emit();
   return next;
+  });
 }
 
 function subscribe(listener: () => void): () => void {
@@ -245,9 +250,9 @@ export function useFluidQueueState(): FluidQueueState {
   return useSyncExternalStore(subscribe, readFluidQueueState, () => EMPTY_STATE);
 }
 
-export function setFluidQueueEnabled(enabled: boolean): boolean {
+export async function setFluidQueueEnabled(enabled: boolean): Promise<boolean> {
   return Boolean(
-    writeState((state) => ({
+    await writeState((state) => ({
       enabled,
       entries: state.entries,
       claimsByThreadKey: state.claimsByThreadKey,
@@ -343,7 +348,7 @@ export async function enqueueFluidQueueEntry(input: {
       images: [...input.draft.images],
       files: [...input.draft.files],
     });
-    const written = writeState((state) => ({
+    const written = await writeState((state) => ({
       enabled: state.enabled,
       entries: [...state.entries, entry],
       claimsByThreadKey: state.claimsByThreadKey,
@@ -435,10 +440,8 @@ export async function restoreFluidQueueEntry(
   }
 }
 
-export function removeFluidQueueEntry(threadKey: string, entryId: string): boolean {
-  const current = readFluidQueueState();
-  if (current.claimsByThreadKey[threadKey]?.entryId === entryId) return false;
-  const written = writeState((state) => ({
+export async function removeFluidQueueEntry(threadKey: string, entryId: string): Promise<boolean> {
+  const written = await writeState((state) => state.claimsByThreadKey[threadKey]?.entryId === entryId ? null : ({
     enabled: state.enabled,
     entries: state.entries.filter(
       (entry) => !(entry.threadKey === threadKey && entry.id === entryId),
@@ -454,37 +457,12 @@ function lockManager(): QueueLockManager | null {
   return locks && typeof locks.request === "function" ? (locks as QueueLockManager) : null;
 }
 
-async function withFallbackLock<T>(threadKey: string, action: () => Promise<T>): Promise<T | null> {
-  const target = storage();
-  if (!target) return action();
-  const key = `${FALLBACK_LOCK_PREFIX}${encodeURIComponent(threadKey)}`;
-  const token = uniqueId();
-  try {
-    const rawExisting = target.getItem(key);
-    if (rawExisting) {
-      const existing = JSON.parse(rawExisting) as { expiresAt?: unknown };
-      if (typeof existing.expiresAt === "number" && existing.expiresAt > Date.now()) return null;
-    }
-    target.setItem(key, JSON.stringify({ token, expiresAt: Date.now() + FALLBACK_LOCK_TTL_MS }));
-    const claimed = JSON.parse(target.getItem(key) ?? "null") as { token?: unknown } | null;
-    if (claimed?.token !== token) return null;
-    return await action();
-  } catch (error) {
-    reportQueueError("fallback-lock", error);
-    return null;
-  } finally {
-    try {
-      const claimed = JSON.parse(target.getItem(key) ?? "null") as { token?: unknown } | null;
-      if (claimed?.token === token) target.removeItem(key);
-    } catch (error) {
-      reportQueueError("release-fallback-lock", error);
-    }
-  }
-}
-
 async function withDispatchLock<T>(threadKey: string, action: () => Promise<T>): Promise<T | null> {
   const manager = lockManager();
-  if (!manager) return withFallbackLock(threadKey, action);
+  if (!manager) {
+    reportQueueError("web-lock", new Error("Cross-window queue locking is unavailable. Your draft has been retained."));
+    return null;
+  }
   try {
     return await manager.request(
       `t3code:c0x-fluid-queue:${threadKey}`,
@@ -512,7 +490,7 @@ export async function dispatchFluidQueueEntry(input: {
         (input.entryId === undefined || candidate.id === input.entryId),
     );
     if (!entry) return "empty" as const;
-    const claimed = writeState((current) => ({
+    const claimed = await writeState((current) => current.claimsByThreadKey[input.threadKey] ? null : ({
       enabled: current.enabled,
       entries: current.entries,
       claimsByThreadKey: {
@@ -534,7 +512,7 @@ export async function dispatchFluidQueueEntry(input: {
       reportQueueError(input.mode === "steer" ? "steer" : "automatic-dispatch", error);
     }
 
-    const finished = writeState((current) => {
+    const finished = await writeState((current) => {
       const claims = { ...current.claimsByThreadKey };
       if (!started || input.mode === "steer") delete claims[input.threadKey];
       return {
@@ -552,35 +530,19 @@ export async function dispatchFluidQueueEntry(input: {
   return result ?? "busy";
 }
 
-export function reconcileFluidQueuePhase(threadKey: string, running: boolean): void {
-  const state = readFluidQueueState();
-  const claim = state.claimsByThreadKey[threadKey];
-  if (!claim) return;
-  if (running && !claim.sawRunning) {
-    writeState((current) => ({
-      enabled: current.enabled,
-      entries: current.entries,
-      claimsByThreadKey: {
-        ...current.claimsByThreadKey,
-        [threadKey]: { ...claim, sawRunning: true },
-      },
-    }));
-    return;
-  }
-  if (
-    !running &&
-    (claim.sawRunning || Date.now() - claim.startedAt >= FLUID_QUEUE_DISPATCH_START_TIMEOUT_MS)
-  ) {
-    writeState((current) => {
-      const claims = { ...current.claimsByThreadKey };
+export async function reconcileFluidQueuePhase(threadKey: string, running: boolean): Promise<void> {
+  await writeState((state) => {
+    const claim = state.claimsByThreadKey[threadKey];
+    if (!claim) return null;
+    const claims = { ...state.claimsByThreadKey };
+    if (running && !claim.sawRunning) {
+      claims[threadKey] = { ...claim, sawRunning: true };
+    } else if (!running && (claim.sawRunning ||
+      Date.now() - claim.startedAt >= FLUID_QUEUE_DISPATCH_START_TIMEOUT_MS)) {
       delete claims[threadKey];
-      return {
-        enabled: current.enabled,
-        entries: current.entries,
-        claimsByThreadKey: claims,
-      };
-    });
-  }
+    } else return null;
+    return { enabled: state.enabled, entries: state.entries, claimsByThreadKey: claims };
+  });
 }
 
 export function fluidQueueEntryLabel(entry: FluidQueueEntry): string {

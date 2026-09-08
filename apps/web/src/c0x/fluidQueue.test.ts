@@ -72,7 +72,14 @@ beforeEach(() => {
   vi.resetModules();
   const localStorage = createMemoryStorage();
   vi.stubGlobal("localStorage", localStorage);
-  vi.stubGlobal("navigator", { userAgent: "" });
+  const tails = new Map<string, Promise<unknown>>();
+  vi.stubGlobal("navigator", { userAgent: "", locks: {
+    request: (name: string, _options: unknown, action: () => Promise<unknown>) => {
+      const next = (tails.get(name) ?? Promise.resolve()).then(action);
+      tails.set(name, next);
+      return next;
+    },
+  } });
   vi.stubGlobal("window", {
     localStorage,
     addEventListener: vi.fn(),
@@ -98,13 +105,22 @@ async function enqueue(prompt?: string) {
 }
 
 describe("fluid steering queue", () => {
+  it('retains queue state when cross-window locking is unavailable', async () => {
+    const { queue, entry } = await enqueue();
+    vi.stubGlobal('navigator', { userAgent: '' });
+    const dispatch = vi.fn(async () => true);
+    expect(await queue.dispatchFluidQueueEntry({ threadKey, mode: 'automatic', dispatch })).toBe('busy');
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(queue.readFluidQueueState().entries[0]?.id).toBe(entry.id);
+    expect(await queue.removeFluidQueueEntry(threadKey, entry.id)).toBe(false);
+  });
   it("persists a complete queued draft and keeps it recoverable when queuing is off", async () => {
     const { queue, entry } = await enqueue("Ship this next\nwith context");
 
     expect(queue.fluidQueueEntryLabel(entry)).toBe("Ship this next with context");
     expect(entry.draft.images[0]?.dataUrl).toBe("data:image/png;base64,aW1hZ2U=");
     expect(entry.draft.files[0]).toMatchObject({ id: "file-1", name: "notes.txt" });
-    expect(queue.setFluidQueueEnabled(false)).toBe(true);
+    expect(await queue.setFluidQueueEnabled(false)).toBe(true);
 
     const persisted = queue.readFluidQueueState();
     expect(persisted.enabled).toBe(false);
@@ -149,14 +165,14 @@ describe("fluid steering queue", () => {
       dispatch,
     });
     await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1));
-    const second = await queue.dispatchFluidQueueEntry({
+    const second = queue.dispatchFluidQueueEntry({
       threadKey,
       mode: "automatic",
       dispatch,
     });
-    expect(second).toBe("busy");
     release();
     expect(await first).toBe("started");
+    expect(await second).toBe("busy");
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
@@ -188,8 +204,8 @@ describe("fluid steering queue", () => {
       }),
     ).toBe("busy");
 
-    queue.reconcileFluidQueuePhase(threadKey, true);
-    queue.reconcileFluidQueuePhase(threadKey, false);
+    await queue.reconcileFluidQueuePhase(threadKey, true);
+    await queue.reconcileFluidQueuePhase(threadKey, false);
     expect(
       await queue.dispatchFluidQueueEntry({
         threadKey,

@@ -199,6 +199,9 @@ import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs } from "./RightPanelTabs";
 import { C0xModuleSurface } from "./c0x/C0xModuleSurface";
+import { C0xSessionPanel } from './c0x/C0xSessionPanel';
+import { C0X_SESSION_DETAILS_ID } from '~/c0x/sessionDetailsSurface';
+import { useSessionDetailOpeners } from '~/c0x/useSessionDetailOpeners';
 import { c0xModuleById, postC0xShellEvent, registerC0xModuleOpener } from "~/c0x/nativeShell";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useC0xComposer } from "~/c0x/composer";
@@ -4148,6 +4151,10 @@ export default function ChatView(props: ChatViewProps) {
     [activeProject, activeThreadRef],
   );
   // The shell carries server PR updates even while thread detail is still loading.
+  const sessionDetailOpeners = useSessionDetailOpeners({
+    threadRef: activeThreadRef, environmentId, workspaceRoot: activeWorkspaceRoot,
+    openFile: openFileSurface, openFileAttachment, openImage: setExpandedImage,
+  });
   const activeThreadMetadata = activeThreadShell ?? activeThread;
   const linkedThreadPullRequest =
     activeThreadMetadata?.linkedPullRequest ?? activeThreadMetadata?.branchPullRequest ?? null;
@@ -6469,7 +6476,7 @@ export default function ChatView(props: ChatViewProps) {
       }
       const currentDraft = useComposerDraftStore.getState().getComposerDraft(composerDraftTarget);
       if (!fluidQueueEntryStillMatchesDraft(entry, currentDraft)) {
-        removeFluidQueueEntry(routeThreadKey, entry.id);
+        await removeFluidQueueEntry(routeThreadKey, entry.id);
         toastManager.add({
           type: "info",
           title: "Draft changed while queuing",
@@ -8242,7 +8249,12 @@ export default function ChatView(props: ChatViewProps) {
     ) : renderedRightPanelSurface?.kind === "c0x-module" ? (
       // C0X patch: a measurable host node — the C0VIBE shell projects the
       // module UI onto this surface's rect.
-      <C0xModuleSurface moduleId={renderedRightPanelSurface.moduleId} />
+      renderedRightPanelSurface.moduleId === C0X_SESSION_DETAILS_ID ? (
+        <C0xSessionPanel key={routeThreadKey} thread={activeThread}
+          messages={timelineMessages} activities={threadActivities}
+          workspaceRoot={activeWorkspaceRoot} branch={activeThread.branch}
+          onOpenGit={isGitRepo ? addDiffSurface : undefined} {...sessionDetailOpeners} />
+      ) : <C0xModuleSurface moduleId={renderedRightPanelSurface.moduleId} />
     ) : renderedRightPanelSurface?.kind === "agents" ? (
       <AgentsPanel
         model={agentPanelModel}

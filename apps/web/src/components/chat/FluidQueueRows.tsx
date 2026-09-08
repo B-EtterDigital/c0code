@@ -51,7 +51,7 @@ export function FluidQueueRows(props: FluidQueueRowsProps) {
   const claim = state.claimsByThreadKey[props.threadKey] ?? null;
 
   useEffect(() => {
-    reconcileFluidQueuePhase(props.threadKey, props.phase === "running");
+    void reconcileFluidQueuePhase(props.threadKey, props.phase === "running");
     if (props.phase !== "ready" || !claim || claim.sawRunning) return;
     const remaining = claim.startedAt + FLUID_QUEUE_DISPATCH_START_TIMEOUT_MS - Date.now();
     const timeout = window.setTimeout(
@@ -93,7 +93,7 @@ export function FluidQueueRows(props: FluidQueueRowsProps) {
 
   const edit = async (entry: FluidQueueEntry) => {
     try {
-      if (await props.onEdit(entry)) removeFluidQueueEntry(props.threadKey, entry.id);
+      if (await props.onEdit(entry)) await removeFluidQueueEntry(props.threadKey, entry.id);
     } catch (error) {
       reportActionError("edit", error);
     }
@@ -101,15 +101,15 @@ export function FluidQueueRows(props: FluidQueueRowsProps) {
 
   const openInSideChat = async (entry: FluidQueueEntry) => {
     try {
-      if (await props.onOpenInSideChat(entry)) removeFluidQueueEntry(props.threadKey, entry.id);
+      if (await props.onOpenInSideChat(entry)) await removeFluidQueueEntry(props.threadKey, entry.id);
     } catch (error) {
       reportActionError("open-side-chat", error);
     }
   };
 
-  const remove = (entry: FluidQueueEntry) => {
+  const remove = async (entry: FluidQueueEntry) => {
     const draft = hydrateFluidQueueEntry(entry);
-    if (removeFluidQueueEntry(props.threadKey, entry.id)) props.onDelete(entry, draft);
+    if (await removeFluidQueueEntry(props.threadKey, entry.id)) props.onDelete(entry, draft);
   };
 
   return (

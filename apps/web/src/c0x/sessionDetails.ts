@@ -1,6 +1,7 @@
 import type { OrchestrationThreadActivity } from "@t3tools/contracts";
 
 import type { ChatAttachment, ChatMessage, Thread } from "../types";
+import { postC0xShellEvent } from "./nativeShell";
 
 export type SessionDetailIcon = "file" | "image" | "unknown" | "web";
 
@@ -223,22 +224,16 @@ function trimUrlPunctuation(value: string): string {
 }
 
 function normalizedHttpUrl(value: string): string | undefined {
-  try {
-    const url = new URL(trimUrlPunctuation(value));
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
-  } catch {
-    return undefined;
-  }
+  const candidate = trimUrlPunctuation(value);
+  if (!URL.canParse(candidate)) return undefined;
+  const url = new URL(candidate);
+  return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
 }
 
 function urlTitle(url: string, suppliedTitle?: string): string {
   const title = suppliedTitle?.replace(/[*_`]/gu, "").trim();
   if (title) return title;
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
+  return URL.canParse(url) ? new URL(url).hostname : url;
 }
 
 function formatBytes(value: number): string {
@@ -329,7 +324,9 @@ function parseJsonContainer(value: unknown): unknown {
   if (typeof value !== "string" || !/^(?:\{|\[)/u.test(value.trim())) return value;
   try {
     return JSON.parse(value) as unknown;
-  } catch {
+  } catch (error) {
+    postC0xShellEvent({ type: "session-details-error", operation: "parse-tool-input",
+      message: error instanceof Error ? error.message : String(error) });
     return value;
   }
 }

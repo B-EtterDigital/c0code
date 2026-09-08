@@ -15,6 +15,7 @@
  * rides config re-injection.
  */
 import { useSyncExternalStore } from "react";
+import { C0X_SESSION_DETAILS_SURFACE } from './sessionDetailsSurface';
 
 export const C0X_SHELL_CONFIG_EVENT = "c0x-shell-config";
 
@@ -148,7 +149,7 @@ function readConfig(): C0xShellConfig {
   }
   const record = source as { modules?: unknown; smarch?: unknown };
   cachedConfig = {
-    modules: sanitizeModules(record.modules),
+    modules: [...sanitizeModules(record.modules).filter(module => module.id !== C0X_SESSION_DETAILS_SURFACE.id), C0X_SESSION_DETAILS_SURFACE],
     smarch: sanitizeSmarch(record.smarch),
   };
   return cachedConfig;
@@ -173,6 +174,7 @@ export function c0xModuleById(moduleId: string): C0xModuleDescriptor | null {
 }
 
 export type C0xShellEvent =
+  | { type: "session-details-error"; operation: string; message: string }
   | { type: "smarch-set"; key: string; enabled: boolean }
   | { type: "smarch-announce" }
   | { type: "module-opened"; moduleId: string }
