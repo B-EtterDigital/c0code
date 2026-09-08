@@ -4,10 +4,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+export function equalComposerSnapshots(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((value, index) => equalComposerSnapshots(value, right[index]));
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) =>
+    Object.hasOwn(right, key) && equalComposerSnapshots(left[key], right[key]));
+}
+
 /** Apply this pane's changes to the latest snapshot, retaining other panes' edits. */
 export function mergeComposerSnapshots(base: unknown, local: unknown, remote: unknown): unknown {
-  if (JSON.stringify(local) === JSON.stringify(base)) return remote;
-  if (JSON.stringify(remote) === JSON.stringify(base)) return local;
+  if (equalComposerSnapshots(local, base)) return remote;
+  if (equalComposerSnapshots(remote, base)) return local;
   // A stale pane may prune an empty draft while another pane is filling it.
   if (local === undefined && remote !== undefined) return remote;
   if (isRecord(local) && isRecord(remote) && (base === undefined || isRecord(base))) {
@@ -43,9 +54,13 @@ export function createComposerStorage(storage: Partial<StateStorage> | null | un
     setItem(name: string, raw: string) {
       const local = parse(raw);
       const current = read(name);
-      const merged = JSON.stringify(mergeComposerSnapshots(baseline, local, parse(current)));
-      if (merged === undefined) throw new Error("Composer persistence received an empty snapshot");
-      if (merged !== current) baseStorage.setItem(name, merged);
+      const remote = parse(current);
+      const merged = mergeComposerSnapshots(baseline, local, remote);
+      if (!equalComposerSnapshots(merged, remote)) {
+        const encoded = equalComposerSnapshots(merged, local) ? raw : JSON.stringify(merged);
+        if (encoded === undefined) throw new Error("Composer persistence received an empty snapshot");
+        baseStorage.setItem(name, encoded);
+      }
       // The in-memory store still represents local, not the merged disk snapshot.
       baseline = local;
     },

@@ -57,7 +57,7 @@ import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { createDeferredStorage, createMemoryStorage } from "./lib/storage";
-import { createComposerStorage } from "./c0x/composerStorage";
+import { createComposerStorage, equalComposerSnapshots } from "./c0x/composerStorage";
 import { preserveLiveComposerDraft } from "./c0x/composerLiveDraft";
 import { getDefaultServerModel } from "./providerModels";
 import { UnifiedSettings } from "@t3tools/contracts/settings";
@@ -4030,11 +4030,11 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     const local = { state: partializeComposerDraftStoreState(current), version: COMPOSER_DRAFT_STORAGE_VERSION };
     const merged = composerSharedStorage.receive(local, event.newValue) as
       StorageValue<PersistedComposerDraftStoreState> | undefined;
-    if (JSON.stringify(merged) === JSON.stringify(local)) return;
+    if (equalComposerSnapshots(merged, local)) return;
     const normalized = normalizeCurrentPersistedComposerDraftStoreState(merged?.state);
     const draftsByThreadKey = Object.fromEntries(
       Object.entries(normalized.draftsByThreadKey).map(([key, draft]) => [
-        key, JSON.stringify(draft) === JSON.stringify(local.state.draftsByThreadKey[key])
+        key, equalComposerSnapshots(draft, local.state.draftsByThreadKey[key])
           ? current.draftsByThreadKey[key]!
           : preserveLiveComposerDraft(toHydratedThreadDraft(draft), current.draftsByThreadKey[key]),
       ]),
