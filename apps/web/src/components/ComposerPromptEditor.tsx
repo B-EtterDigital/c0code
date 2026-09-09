@@ -805,8 +805,10 @@ function $selectionTouchesInlineToken(selection: ReturnType<typeof $getSelection
   return selection.getNodes().some((node) => isComposerInlineTokenNode(node));
 }
 
-function $readSelectionOffsetFromEditorState(fallback: number): number {
-  const selection = $getSelection();
+function $readSelectionOffsetFromEditorState(
+  fallback: number,
+  selection = $getSelection(),
+): number {
   if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
     return fallback;
   }
@@ -816,8 +818,10 @@ function $readSelectionOffsetFromEditorState(fallback: number): number {
   return Math.max(0, Math.min(offset, composerLength));
 }
 
-function $readExpandedSelectionOffsetFromEditorState(fallback: number): number {
-  const selection = $getSelection();
+function $readExpandedSelectionOffsetFromEditorState(
+  fallback: number,
+  selection = $getSelection(),
+): number {
   if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
     return fallback;
   }
@@ -1818,11 +1822,19 @@ function ComposerPromptEditorInner({
   } => {
     let snapshot = snapshotRef.current;
     editor.getEditorState().read(() => {
+      const rootElement = editor.getRootElement();
+      const domSelection = rootElement?.ownerDocument.getSelection();
+      // Native caret movement can precede Lexical's selection update. Read
+      // the visible selection so history navigation cannot skip a boundary.
+      const selection = rootElement && domSelection?.anchorNode && domSelection.focusNode
+        && rootElement.contains(domSelection.anchorNode) && rootElement.contains(domSelection.focusNode)
+        ? $createRangeSelectionFromDom(domSelection, editor) ?? $getSelection()
+        : $getSelection();
       const nextValue = $getRoot().getTextContent();
       const fallbackCursor = clampCollapsedComposerCursor(nextValue, snapshotRef.current.cursor);
       const nextCursor = clampCollapsedComposerCursor(
         nextValue,
-        $readSelectionOffsetFromEditorState(fallbackCursor),
+        $readSelectionOffsetFromEditorState(fallbackCursor, selection),
       );
       const fallbackExpandedCursor = clampExpandedCursor(
         nextValue,
@@ -1830,9 +1842,9 @@ function ComposerPromptEditorInner({
       );
       const nextExpandedCursor = clampExpandedCursor(
         nextValue,
-        $readExpandedSelectionOffsetFromEditorState(fallbackExpandedCursor),
+        $readExpandedSelectionOffsetFromEditorState(fallbackExpandedCursor, selection),
       );
-      const selectionRange = getSelectionRangeForExpandedComposerOffsets($getSelection());
+      const selectionRange = getSelectionRangeForExpandedComposerOffsets(selection);
       const terminalContextIds = collectTerminalContextIds($getRoot());
       snapshot = {
         value: nextValue,
