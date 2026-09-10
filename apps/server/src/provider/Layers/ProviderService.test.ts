@@ -74,6 +74,8 @@ import {
   SqlitePersistenceMemory,
 } from "../../persistence/Layers/Sqlite.ts";
 import * as ServerConfig from "../../config.ts";
+import type { C0VibeModuleScopeClientShape } from "../../mcp/C0VibeModuleScopeClient.ts";
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import { makeAdapterRegistryMock } from "../testUtils/providerAdapterRegistryMock.ts";
@@ -4804,6 +4806,14 @@ describe("agent browser access", () => {
     enableAgentBrowserAccess: boolean,
     threadId: ThreadId,
     projectOverride?: boolean,
+    options?: {
+      readonly credential?: { readonly config: McpProviderSession.McpProviderSessionConfig };
+      readonly c0vibeModuleScope?: C0VibeModuleScopeClientShape;
+      readonly captureSession?: (
+        config: McpProviderSession.McpProviderSessionConfig | undefined,
+      ) => void;
+      readonly stopAfterStart?: boolean;
+    },
   ) =>
     Effect.gen(function* () {
       const issued: Array<ThreadId> = [];
@@ -4866,9 +4876,10 @@ describe("agent browser access", () => {
         issueMcpCredential: (request) =>
           Effect.sync(() => {
             issued.push(request.threadId);
-            return undefined;
+            return options?.credential;
           }),
         revokeMcpCredential: (revoked) => Effect.sync(() => void revokedThreads.push(revoked)),
+        ...(options?.c0vibeModuleScope ? { c0vibeModuleScope: options.c0vibeModuleScope } : {}),
       }).pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
@@ -4892,12 +4903,17 @@ describe("agent browser access", () => {
 
       yield* Effect.gen(function* () {
         const provider = yield* ProviderService.ProviderService;
-        return yield* provider.startSession(threadId, {
+        const session = yield* provider.startSession(threadId, {
           provider: CODEX_DRIVER,
           providerInstanceId: codexInstanceId,
           threadId,
           runtimeMode: "full-access",
         });
+        options?.captureSession?.(McpProviderSession.readMcpProviderSession(threadId));
+        if (options?.stopAfterStart) {
+          yield* provider.stopSession({ threadId });
+        }
+        return session;
       }).pipe(Effect.provide(providerLayer));
 
       return issued;
@@ -4953,6 +4969,119 @@ describe("agent browser access", () => {
       const threadId = asThreadId("thread-project-browser-on");
       const issued = yield* startSessionWith(false, threadId, true);
       assert.deepEqual(issued, [threadId]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("issues C0Vibe scope with the minted native provider session id", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-c0vibe-issued");
+      const providerSessionId = "provider-session-c0vibe-issued";
+      const issueRequests: unknown[] = [];
+      let preparedConfig: McpProviderSession.McpProviderSessionConfig | undefined;
+      const credential = {
+        config: {
+          environmentId: EnvironmentId.make("environment-c0vibe"),
+          threadId,
+          providerSessionId,
+          providerInstanceId: codexInstanceId,
+          endpoint: "http://127.0.0.1:43123/mcp",
+          authorizationHeader: "Bearer t3-token",
+        },
+      };
+
+      yield* startSessionWith(true, threadId, undefined, {
+        credential,
+        c0vibeModuleScope: {
+          issue: (request) =>
+            Effect.sync(() => {
+              issueRequests.push(request);
+              return {
+                name: "c0vibe",
+                endpoint: "http://127.0.0.1:43124/mcp",
+                authorizationHeader: "Bearer c0vibe-token",
+              };
+            }),
+          revoke: () => Effect.void,
+        },
+        captureSession: (config) => {
+          preparedConfig = config;
+        },
+      });
+
+      assert.deepEqual(issueRequests, [
+        {
+          environmentId: credential.config.environmentId,
+          threadId,
+          providerSessionId,
+          providerInstanceId: codexInstanceId,
+        },
+      ]);
+      assert.deepEqual(preparedConfig?.additionalServers, [
+        {
+          name: "c0vibe",
+          endpoint: "http://127.0.0.1:43124/mcp",
+          authorizationHeader: "Bearer c0vibe-token",
+        },
+      ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("keeps the native MCP config when C0Vibe declines", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-c0vibe-declined");
+      let preparedConfig: McpProviderSession.McpProviderSessionConfig | undefined;
+
+      yield* startSessionWith(true, threadId, undefined, {
+        credential: {
+          config: {
+            environmentId: EnvironmentId.make("environment-c0vibe"),
+            threadId,
+            providerSessionId: "provider-session-c0vibe-declined",
+            providerInstanceId: codexInstanceId,
+            endpoint: "http://127.0.0.1:43123/mcp",
+            authorizationHeader: "Bearer t3-token",
+          },
+        },
+        c0vibeModuleScope: {
+          issue: () => Effect.succeed(undefined),
+          revoke: () => Effect.void,
+        },
+        captureSession: (config) => {
+          preparedConfig = config;
+        },
+      });
+
+      assert.isDefined(preparedConfig);
+      assert.notProperty(preparedConfig ?? {}, "additionalServers");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("revokes C0Vibe scope by thread while preparing and stopping a session", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-c0vibe-stop");
+      const revocations: unknown[] = [];
+
+      yield* startSessionWith(true, threadId, undefined, {
+        credential: {
+          config: {
+            environmentId: EnvironmentId.make("environment-c0vibe"),
+            threadId,
+            providerSessionId: "provider-session-c0vibe-stop",
+            providerInstanceId: codexInstanceId,
+            endpoint: "http://127.0.0.1:43123/mcp",
+            authorizationHeader: "Bearer t3-token",
+          },
+        },
+        c0vibeModuleScope: {
+          issue: () => Effect.succeed(undefined),
+          revoke: (request) => Effect.sync(() => void revocations.push(request)),
+        },
+        stopAfterStart: true,
+      });
+
+      assert.isAtLeast(revocations.length, 2);
+      assert.deepEqual(revocations[0], { threadId });
+      assert.deepEqual(revocations[1], { threadId });
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

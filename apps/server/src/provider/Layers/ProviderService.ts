@@ -76,6 +76,7 @@ import * as ProviderSessionDirectory from "../Services/ProviderSessionDirectory.
 import { type EventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
+import * as C0VibeModuleScopeClient from "../../mcp/C0VibeModuleScopeClient.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
 import * as ServerSettings from "../../serverSettings.ts";
@@ -252,6 +253,8 @@ export interface ProviderServiceLiveOptions {
   readonly issueMcpCredential?: typeof McpSessionRegistry.issueActiveMcpCredential;
   /** Same seam as `issueMcpCredential`, for observing the deny path's revoke. */
   readonly revokeMcpCredential?: typeof McpSessionRegistry.revokeActiveMcpThread;
+  /** Overrides the optional C0Vibe native module-scope resolver. */
+  readonly c0vibeModuleScope?: C0VibeModuleScopeClient.C0VibeModuleScopeClientShape;
 }
 
 interface TurnAnalyticsMetadata {
@@ -482,6 +485,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     options?.issueMcpCredential ?? McpSessionRegistry.issueActiveMcpCredential;
   const revokeMcpCredential =
     options?.revokeMcpCredential ?? McpSessionRegistry.revokeActiveMcpThread;
+  const c0vibeModuleScope = options?.c0vibeModuleScope ?? C0VibeModuleScopeClient;
   const fileSystem = yield* FileSystem.FileSystem;
   const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
   const pendingCompactions = new Map<ThreadId, PendingCompaction>();
@@ -890,6 +894,27 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     ),
   );
 
+  const revokeC0VibeModuleScope = (threadId: ThreadId) =>
+    c0vibeModuleScope
+      .revoke({ threadId })
+      .pipe(
+        Effect.catchCause(() =>
+          Effect.logWarning("C0Vibe module-scope revoke failed: unreachable."),
+        ),
+      );
+  const issueC0VibeModuleScope = (input: C0VibeModuleScopeClient.C0VibeModuleScopeIssueInput) =>
+    c0vibeModuleScope
+      .issue(input)
+      .pipe(
+        Effect.catchCause(() =>
+          Effect.logWarning("C0Vibe module-scope issue failed: unreachable.").pipe(
+            Effect.as(undefined),
+          ),
+        ),
+      );
+  const revokeMcpSessionForThread = (threadId: ThreadId) =>
+    revokeC0VibeModuleScope(threadId).pipe(Effect.andThen(revokeMcpCredential(threadId)));
+
   const prepareMcpSession = (threadId: ThreadId, providerInstanceId: ProviderInstanceId) =>
     Effect.gen(function* () {
       if (!(yield* agentBrowserAccessEnabled(threadId))) {
@@ -899,18 +924,31 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         // against `/mcp` for the rest of its liveness window — and later turns
         // would keep refreshing it. A session restart (runtime mode, cwd,
         // model) re-prepares without stopping, so it relies on this.
-        yield* revokeMcpCredential(threadId);
+        yield* revokeMcpSessionForThread(threadId);
         yield* Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId));
         return undefined;
       }
+      // Native MCP issuance revokes the previous t3-code credential by thread.
+      // Mirror that lifecycle for C0Vibe before binding a fresh provider session.
+      yield* revokeC0VibeModuleScope(threadId);
       const credential = yield* issueMcpCredential({ threadId, providerInstanceId });
       if (credential) {
-        yield* Effect.sync(() => McpProviderSession.setMcpProviderSession(credential.config));
+        const additionalServer = yield* issueC0VibeModuleScope({
+          environmentId: credential.config.environmentId,
+          threadId,
+          providerSessionId: credential.config.providerSessionId,
+          providerInstanceId,
+        });
+        const config = additionalServer
+          ? { ...credential.config, additionalServers: [additionalServer] }
+          : credential.config;
+        yield* Effect.sync(() => McpProviderSession.setMcpProviderSession(config));
+        return { ...credential, config };
       }
       return credential;
     });
   const clearMcpSession = (threadId: ThreadId) =>
-    McpSessionRegistry.revokeActiveMcpThread(threadId).pipe(
+    revokeMcpSessionForThread(threadId).pipe(
       Effect.tap(() => Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId))),
     );
 
@@ -1961,7 +1999,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           "provider.thread_id": input.threadId,
         });
         if (routed.isActive) {
-          yield* routed.adapter.stopSession(routed.threadId);
+          yield* routed.adapter
+            .stopSession(routed.threadId)
+            .pipe(Effect.onError(() => clearMcpSession(input.threadId)));
         }
         const pendingCompaction = pendingCompactions.get(input.threadId);
         if (pendingCompaction !== undefined) {
@@ -2227,9 +2267,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         }),
       ),
     ).pipe(Effect.asVoid);
-    yield* Effect.forEach(currentAdapters, ([, adapter]) => adapter.stopAll()).pipe(Effect.asVoid);
+    yield* Effect.forEach(threadIds, revokeC0VibeModuleScope, { discard: true });
     yield* McpSessionRegistry.revokeAllActiveMcpCredentials();
     McpProviderSession.clearAllMcpProviderSessions();
+    yield* Effect.forEach(currentAdapters, ([, adapter]) => adapter.stopAll()).pipe(Effect.asVoid);
     const bindings = yield* directory.listBindings().pipe(Effect.orElseSucceed(() => []));
     yield* Effect.forEach(bindings, (binding) =>
       Effect.gen(function* () {

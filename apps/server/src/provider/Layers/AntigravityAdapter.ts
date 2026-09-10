@@ -785,7 +785,9 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
           .withProcess(
             stopOwned,
             Effect.gen(function* () {
-              const mcp = McpProviderSession.readMcpProviderSession(input.threadId);
+              const mcpServers = McpProviderSession.mcpServersOf(
+                McpProviderSession.readMcpProviderSession(input.threadId),
+              );
               // The attachments dir grant lets the agent read pasted files at
               // the paths ProviderService injects into the turn text. It is a
               // leaf directory holding only uploads.
@@ -795,16 +797,12 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
                 clientFileSystem: true,
                 additionalDirectories: [serverConfig.attachmentsDir],
                 ...(Option.isSome(cursor) ? { resumeSessionId: cursor.value.sessionId } : {}),
-                mcpServers: mcp
-                  ? [
-                      {
-                        type: "http",
-                        name: "t3-code",
-                        url: mcp.endpoint,
-                        headers: [{ name: "Authorization", value: mcp.authorizationHeader }],
-                      },
-                    ]
-                  : [],
+                mcpServers: mcpServers.map((server) => ({
+                  type: "http",
+                  name: server.name,
+                  url: server.endpoint,
+                  headers: [{ name: "Authorization", value: server.authorizationHeader }],
+                })),
                 ...makeNativeLoggers({
                   nativeEventLogger: options.nativeEventLogger,
                   provider: PROVIDER,

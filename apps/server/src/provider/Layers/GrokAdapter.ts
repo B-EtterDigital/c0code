@@ -986,7 +986,9 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             threadId: input.threadId,
           });
 
-          const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+          const mcpServers = McpProviderSession.mcpServersOf(
+            McpProviderSession.readMcpProviderSession(input.threadId),
+          );
           const acp = yield* makeGrokAcpRuntime({
             grokSettings,
             ...(options?.environment ? { environment: options.environment } : {}),
@@ -995,21 +997,19 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             runtimeMode: input.runtimeMode,
             ...(resumeSessionId ? { resumeSessionId } : {}),
             clientInfo: { name: "t3-code", version: "0.0.0" },
-            ...(mcpSession
+            ...(mcpServers.length > 0
               ? {
-                  mcpServers: [
-                    {
-                      type: "http" as const,
-                      name: "t3-code",
-                      url: mcpSession.endpoint,
-                      headers: [
-                        {
-                          name: "Authorization",
-                          value: mcpSession.authorizationHeader,
-                        },
-                      ],
-                    },
-                  ],
+                  mcpServers: mcpServers.map((server) => ({
+                    type: "http" as const,
+                    name: server.name,
+                    url: server.endpoint,
+                    headers: [
+                      {
+                        name: "Authorization",
+                        value: server.authorizationHeader,
+                      },
+                    ],
+                  })),
                 }
               : {}),
             ...acpNativeLoggers,

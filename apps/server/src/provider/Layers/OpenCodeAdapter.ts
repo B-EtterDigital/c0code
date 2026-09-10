@@ -2839,20 +2839,27 @@ export function makeOpenCodeAdapter(
                 directory,
                 ...(server.serverPassword ? { serverPassword: server.serverPassword } : {}),
               });
-              const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
-              if (mcpSession && !server.external) {
-                yield* runOpenCodeSdk("mcp.add", () =>
-                  client.mcp.add({
-                    name: "t3-code",
-                    config: {
-                      type: "remote",
-                      url: mcpSession.endpoint,
-                      headers: {
-                        Authorization: mcpSession.authorizationHeader,
-                      },
-                      oauth: false,
-                    },
-                  }),
+              const mcpServers = McpProviderSession.mcpServersOf(
+                McpProviderSession.readMcpProviderSession(input.threadId),
+              );
+              if (!server.external) {
+                yield* Effect.forEach(
+                  mcpServers,
+                  (mcpServer) =>
+                    runOpenCodeSdk("mcp.add", () =>
+                      client.mcp.add({
+                        name: mcpServer.name,
+                        config: {
+                          type: "remote",
+                          url: mcpServer.endpoint,
+                          headers: {
+                            Authorization: mcpServer.authorizationHeader,
+                          },
+                          oauth: false,
+                        },
+                      }),
+                    ),
+                  { discard: true },
                 );
               }
               // Resume: re-adopt the session named by the durable cursor —

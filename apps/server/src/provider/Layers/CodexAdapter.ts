@@ -2254,7 +2254,16 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           input.modelSelection?.instanceId === boundInstanceId
             ? getCodexServiceTierOptionValue(input.modelSelection)
             : undefined;
-        const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+        const mcpServers = McpProviderSession.mcpServersOf(
+          McpProviderSession.readMcpProviderSession(input.threadId),
+        );
+        const namedMcpServers = mcpServers.map((server) => ({
+          server,
+          tokenEnvironmentVariable:
+            server.name === "t3-code"
+              ? "T3_MCP_BEARER_TOKEN"
+              : `T3_MCP_BEARER_TOKEN_${server.name.toUpperCase().replaceAll("-", "_")}`,
+        }));
         const runtimeInput: CodexSessionRuntimeOptions = {
           threadId: input.threadId,
           providerInstanceId: boundInstanceId,
@@ -2271,18 +2280,23 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { model: input.modelSelection.model }
             : {}),
           ...(serviceTier ? { serviceTier } : {}),
-          ...(mcpSession
+          ...(namedMcpServers.length > 0
             ? {
                 environment: {
                   ...(options?.environment ?? process.env),
-                  T3_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
+                  ...Object.fromEntries(
+                    namedMcpServers.map(({ server, tokenEnvironmentVariable }) => [
+                      tokenEnvironmentVariable,
+                      server.authorizationHeader.replace(/^Bearer\s+/, ""),
+                    ]),
+                  ),
                 },
-                appServerArgs: [
+                appServerArgs: namedMcpServers.flatMap(({ server, tokenEnvironmentVariable }) => [
                   "-c",
-                  `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
+                  `mcp_servers.${server.name}.url=${server.endpoint}`,
                   "-c",
-                  'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
-                ],
+                  `mcp_servers.${server.name}.bearer_token_env_var="${tokenEnvironmentVariable}"`,
+                ]),
               }
             : {}),
         };

@@ -4658,7 +4658,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           ? { autoCompactWindow: Number(claudeSettings.autoCompactWindow) }
           : {}),
       };
-      const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+      const mcpServers = McpProviderSession.mcpServersOf(
+        McpProviderSession.readMcpProviderSession(input.threadId),
+      );
       // The attachments dir grant lets the agent Read/copy pasted images at
       // the paths ProviderService injects into the turn text, without an
       // approval prompt. It is a leaf directory holding only attachment
@@ -4699,17 +4701,20 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         env: claudeEnvironment,
         additionalDirectories,
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
-        ...(mcpSession
+        ...(mcpServers.length > 0
           ? {
-              mcpServers: {
-                "t3-code": {
-                  type: "http",
-                  url: mcpSession.endpoint,
-                  headers: {
-                    Authorization: mcpSession.authorizationHeader,
+              mcpServers: Object.fromEntries(
+                mcpServers.map((server) => [
+                  server.name,
+                  {
+                    type: "http" as const,
+                    url: server.endpoint,
+                    headers: {
+                      Authorization: server.authorizationHeader,
+                    },
                   },
-                },
-              },
+                ]),
+              ),
             }
           : {}),
       };
