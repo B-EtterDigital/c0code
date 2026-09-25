@@ -43,6 +43,7 @@ import {
 } from "../Layers/codexResetCredit.ts";
 import {
   checkCodexProviderStatus,
+  probeCodexAccountUsage,
   makePendingCodexProvider,
   probeCodexSkillsForCwd,
   withCodexAppServerClient,
@@ -195,10 +196,34 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
       // Kick the TTL-gated manifest refresh in the background and classify
       // with the in-memory manifest, so a slow or hung fetch never delays the
       // provider check. A refresh that lands mid-probe applies on the next one.
+      // Disabled accounts still report quota, but cannot run a turn. Cache the
+      // read (including failures) so opening several clients cannot spawn a
+      // probe per client. Reconfiguration rebuilds this instance and its cache.
+      const checkAccount = yield* Effect.cachedWithTTL(
+        checkCodexProviderStatus(
+          { ...effectiveConfig, enabled: true },
+          probeCodexAccountUsage,
+          processEnv,
+        ).pipe(
+          Effect.map((snapshot) =>
+            enabled
+              ? snapshot
+              : {
+                  ...snapshot,
+                  enabled: false,
+                  status: "disabled" as const,
+                },
+          ),
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        ),
+        "60 seconds",
+      );
       const checkProvider = modelManifest.refreshInBackground.pipe(
         Effect.andThen(
           Effect.zipWith(
-            checkCodexProviderStatus(effectiveConfig, undefined, processEnv),
+            enabled
+              ? checkCodexProviderStatus(effectiveConfig, undefined, processEnv)
+              : checkAccount,
             modelManifest.current,
             (draft, manifest) =>
               stampIdentity(ModelManifest.applyModelManifest(draft, manifest, DRIVER_KIND)),

@@ -1,6 +1,7 @@
+import { quotaRemaining } from "@t3tools/shared/providerSwitch";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { memo, useLayoutEffect, useRef, useState } from "react";
-import { SparklesIcon, StarIcon } from "lucide-react";
+import { SparklesIcon, StarIcon, TriangleAlertIcon } from "lucide-react";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
@@ -135,6 +136,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
 
           {/* Instance buttons (one per configured instance — built-in + custom) */}
           {props.instanceEntries.map((entry) => {
+            const remainingQuota = quotaRemaining(entry.snapshot.usageLimits, Date.now());
             const isUnavailable = !isProviderInstancePickerReady(entry);
             const isContextDisabled = props.disabledInstanceIds?.has(entry.instanceId) ?? false;
             const unavailableSelectionIsReachable =
@@ -198,6 +200,17 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                     ? { badgeClassName: "h-3 min-w-3 px-0.5 text-[7px]" }
                     : {})}
                 />
+                {remainingQuota !== null ? (
+                  <span
+                    className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-0.5 text-[9px] leading-3 tabular-nums text-muted-foreground"
+                    aria-label={`${Math.round(remainingQuota)}% quota remaining`}
+                  >
+                    {remainingQuota === 0 ? (
+                      <TriangleAlertIcon className="size-2.5 text-warning-foreground" aria-hidden />
+                    ) : null}
+                    {Math.round(remainingQuota)}%
+                  </span>
+                ) : null}
                 {showNewBadge ? (
                   <span className={NEW_BADGE_CLASS} aria-hidden>
                     <SparklesIcon className="size-2" />

@@ -175,12 +175,12 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
 
       // Start the TTL-gated refresh without delaying provider readiness. The
       // next check observes a remote manifest after the background fetch lands.
-      const checkProvider = modelManifest.refreshInBackground.pipe(
+      const checkAccount = modelManifest.refreshInBackground.pipe(
         Effect.andThen(
           modelManifest.current.pipe(
             Effect.flatMap((manifest) =>
               checkClaudeProviderStatus(
-                effectiveConfig,
+                { ...effectiveConfig, enabled: true },
                 () => Cache.get(capabilitiesProbeCache, capabilitiesCacheKey),
                 processEnv,
                 cwd,
@@ -188,13 +188,20 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
                 scopedLimitNames,
               ),
             ),
-            Effect.map(stampIdentity),
+            Effect.map((snapshot) =>
+              stampIdentity(
+                enabled ? snapshot : { ...snapshot, enabled: false, status: "disabled" },
+              ),
+            ),
           ),
         ),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(Path.Path, path),
       );
+
+      const cachedAccountCheck = yield* Effect.cachedWithTTL(checkAccount, "60 seconds");
+      const checkProvider = enabled ? checkAccount : cachedAccountCheck;
 
       const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
       const snapshot = yield* makeManagedServerProvider<ProviderSnapshotSettings<ClaudeSettings>>({
