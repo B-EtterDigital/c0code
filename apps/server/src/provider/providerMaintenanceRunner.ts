@@ -238,15 +238,28 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
     instanceId: ProviderInstanceId,
   ): Effect.Effect<VerifiedProviderRefresh> =>
     providerRegistry.getProviders.pipe(
-      Effect.map((providers) => {
-        const instanceIds: Array<ProviderInstanceId> = [];
-        for (const candidate of providers) {
-          if (candidate.driver === provider && candidate.instanceId === instanceId) {
-            instanceIds.push(candidate.instanceId);
+      Effect.flatMap((providers) =>
+        Effect.gen(function* () {
+          const instanceIds: Array<ProviderInstanceId> = [instanceId];
+          const lockKey = maintenanceCapabilities.update?.lockKey;
+          if (lockKey === undefined) return instanceIds;
+          for (const candidate of providers) {
+            if (candidate.driver !== provider || candidate.instanceId === instanceId) continue;
+            const capabilities = yield* providerRegistry
+              .getProviderMaintenanceCapabilitiesForInstance(candidate.instanceId, provider)
+              .pipe(
+                Effect.catch((cause) =>
+                  Effect.logWarning("Could not identify a sibling provider installation", {
+                    instanceId: candidate.instanceId,
+                    cause,
+                  }).pipe(Effect.as(undefined)),
+                ),
+              );
+            if (capabilities?.update?.lockKey === lockKey) instanceIds.push(candidate.instanceId);
           }
-        }
-        return instanceIds;
-      }),
+          return instanceIds;
+        }),
+      ),
       Effect.flatMap((instanceIds) =>
         instanceIds.length === 0
           ? providerRegistry.refreshInstance(instanceId)
@@ -254,7 +267,7 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
               instanceIds,
               (instanceId) => providerRegistry.refreshInstance(instanceId),
               {
-                concurrency: "unbounded",
+                concurrency: 2,
                 discard: true,
               },
             ).pipe(Effect.andThen(providerRegistry.getProviders)),

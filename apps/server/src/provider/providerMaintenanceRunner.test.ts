@@ -256,6 +256,41 @@ describe("providerMaintenanceRunner", () => {
     );
   });
 
+  it.effect("updates a shared CLI once and refreshes all accounts for its driver", () => {
+    const refreshed: ProviderInstanceId[] = [];
+    const commands: string[] = [];
+    return Effect.gen(function* () {
+      const second = { ...baseProvider, instanceId: ProviderInstanceId.make("codex-second") };
+      const { registry, providersRef } = yield* makeRegistry([
+        baseProvider,
+        second,
+        baseCursorProvider,
+      ]);
+      const updater = yield* makeTestRunner({
+        ...registry,
+        refreshInstance: (id) =>
+          Effect.gen(function* () {
+            refreshed.push(id);
+            return yield* Ref.get(providersRef);
+          }),
+      });
+      yield* updater.updateProvider(CODEX_DRIVER);
+      assert.deepStrictEqual(refreshed.sort(), [baseProvider.instanceId, second.instanceId].sort());
+      assert.strictEqual(commands.length, 1);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          NonWindowsPlatform,
+          latestVersionHttpClient("0.0.0"),
+          mockSpawnerLayer((command) => {
+            commands.push(command);
+            return { stdout: "updated" };
+          }),
+        ),
+      ),
+    );
+  });
+
   it.effect("reports unchanged when the updater exits 0 but the provider is gone", () => {
     return Effect.gen(function* () {
       const { registry, providersRef } = yield* makeRegistry(baseProvider);
@@ -541,10 +576,9 @@ describe("providerMaintenanceRunner", () => {
               packageName: "@openai/codex-instance-test",
               updateExecutable: "vp",
               updateArgs: ["i", "-g", "@openai/codex"],
-              updateLockKey: "vite-plus-global",
+              updateLockKey:
+                instanceId === personalInstanceId ? "vite-plus-global" : "separate-installation",
             }),
-          ).pipe(
-            Effect.tap(() => Effect.sync(() => assert.strictEqual(instanceId, personalInstanceId))),
           ),
         refreshInstance: (instanceId) =>
           registry.refreshInstance(instanceId).pipe(
