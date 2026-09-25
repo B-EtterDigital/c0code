@@ -1,6 +1,8 @@
 import {
   EventId,
   ProviderDriverKind,
+  ProviderInstanceId,
+  TurnId,
   RuntimeTaskId,
   ThreadId,
   type ProviderRuntimeEvent,
@@ -140,5 +142,34 @@ describe("runtimeEventToActivities tool streaming persistence", () => {
     expect(activities).toHaveLength(1);
     const payload = activities[0]?.payload as Record<string, unknown>;
     expect(payload.data).toEqual(streamingData);
+  });
+});
+
+describe("account work attribution", () => {
+  it("stores the completing instance and normalized turn totals without using a thread's current account", () => {
+    const event = {
+      ...base,
+      type: "turn.completed",
+      eventId: EventId.make("usage-event"),
+      providerInstanceId: ProviderInstanceId.make("poly"),
+      turnId: TurnId.make("turn-1"),
+      payload: {
+        state: "completed",
+        tokenUsage: {
+          usageScope: "main_agent",
+          usageStatus: "complete",
+          inputTokens: 100,
+          outputTokens: 20,
+          hasSubagents: false,
+        },
+      },
+    } satisfies ProviderRuntimeEvent;
+    const activities = runtimeEventToActivities(event);
+    expect(activities).toHaveLength(1);
+    expect(activities[0]?.kind).toBe("turn.usage");
+    expect(activities[0]?.payload).toEqual({
+      providerInstanceId: "poly",
+      tokenUsage: event.payload.tokenUsage,
+    });
   });
 });

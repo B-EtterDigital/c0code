@@ -1,3 +1,4 @@
+import { AccountUsageHistory } from "./AccountUsageHistory";
 import {
   type EnvironmentId,
   type ProviderConsumeResetCreditOutcome,
@@ -331,5 +332,16 @@ export function UsageLimitsSection({
     selectedEnvironmentIds === null
       ? presentations
       : new Map([...presentations].filter(([id]) => selectedEnvironmentIds.has(id)));
-  return <UsageLimitsPooled presentations={selected} now={now} />;
+  return (
+    <>
+      <UsageLimitsPooled presentations={selected} now={now} />
+      {[...selected].map(([environmentId, presentation]) => (
+        <AccountUsageHistory
+          key={environmentId}
+          environmentId={environmentId}
+          providers={presentation.serverConfig?.providers ?? []}
+        />
+      ))}
+    </>
+  );
 }

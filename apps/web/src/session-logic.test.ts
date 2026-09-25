@@ -1936,6 +1936,20 @@ describe("deriveTimelineEntries", () => {
 });
 
 describe("deriveWorkLogEntries context window handling", () => {
+  it("keeps account usage bookkeeping out of the conversation work log", () => {
+    expect(
+      deriveWorkLogEntries([
+        makeActivity({
+          id: "usage-1",
+          turnId: "turn-1",
+          kind: "turn.usage",
+          summary: "Turn usage recorded",
+          tone: "info",
+        }),
+      ]),
+    ).toEqual([]);
+  });
+
   it("excludes context window updates from the work log", () => {
     const entries = deriveWorkLogEntries([
       makeActivity({

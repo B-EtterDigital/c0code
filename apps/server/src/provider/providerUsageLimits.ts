@@ -138,5 +138,13 @@ export function resolveUsageLimitsAfterProbe(input: {
   if (probed?.unavailable?.reason === "probeFailed" && published && !published.unavailable) {
     return published;
   }
+  if (
+    published &&
+    probed &&
+    !published.unavailable &&
+    !probed.unavailable &&
+    Date.parse(probed.checkedAt) < Date.parse(published.checkedAt)
+  )
+    return published;
   return probed;
 }
