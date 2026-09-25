@@ -1,3 +1,4 @@
+import { ProviderUsageHistory, ProviderUsageHistoryInput } from "./providerUsageLimits.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
@@ -337,6 +338,7 @@ export const WS_METHODS = {
   serverReportHostPowerState: "server.reportHostPowerState",
   serverGetBackgroundPolicy: "server.getBackgroundPolicy",
   serverGetUsageSummary: "server.getUsageSummary",
+  serverGetProviderUsageHistory: "server.getProviderUsageHistory",
   serverRefreshUsageRates: "server.refreshUsageRates",
 
   // Cloud environment methods
@@ -575,6 +577,12 @@ const WsServerRetryResourceTelemetryRpc = Rpc.make(WS_METHODS.serverRetryResourc
   payload: Schema.Struct({}),
   success: ResourceTelemetryRetryResult,
   error: EnvironmentAuthorizationError,
+});
+
+const WsServerGetProviderUsageHistoryRpc = Rpc.make(WS_METHODS.serverGetProviderUsageHistory, {
+  payload: ProviderUsageHistoryInput,
+  success: ProviderUsageHistory,
+  error: Schema.Union([EnvironmentAuthorizationError, UsageReadError]),
 });
 
 const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSummary, {
@@ -1221,6 +1229,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetResourceTelemetryHistoryRpc,
   WsServerRetryResourceTelemetryRpc,
   WsServerGetUsageSummaryRpc,
+  WsServerGetProviderUsageHistoryRpc,
   WsServerRefreshUsageRatesRpc,
   WsServerSignalProcessRpc,
   WsServerReportClientActivityRpc,

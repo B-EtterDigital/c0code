@@ -1042,6 +1042,11 @@ export function createServerEnvironmentAtoms<R, E>(
     }),
     // A cold transcript scan is measured in seconds, so keep the result around
     // long enough that switching windows or re-rendering does not rescan.
+    providerUsageHistory: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:provider-usage-history",
+      tag: WS_METHODS.serverGetProviderUsageHistory,
+      staleTimeMs: 60_000,
+    }),
     usageSummary: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:usage-summary",
       tag: WS_METHODS.serverGetUsageSummary,

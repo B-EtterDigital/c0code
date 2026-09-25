@@ -1,8 +1,9 @@
+import { Link } from "@tanstack/react-router";
 import type { EnvironmentId, UnifiedSettings } from "@t3tools/contracts";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 
-import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
+import { useEnvironmentSettings, useUpdateEnvironmentSettings } from "../../hooks/useSettings";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -30,6 +31,7 @@ export function UsageProviderSettings({
   readonly readOnly: boolean;
 }) {
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
+  const settings = useEnvironmentSettings(environmentId);
   const [adding, setAdding] = useState(false);
   const entries = Object.entries(sources);
 
@@ -46,6 +48,36 @@ export function UsageProviderSettings({
           ) : null
         }
       >
+        <SettingsRow
+          title="When an account reaches its limit"
+          description="Automatic switching uses only enabled accounts that can preserve this conversation and have confirmed capacity."
+          control={
+            <select
+              aria-label="Account switching on usage limit"
+              disabled={readOnly}
+              value={settings.usageLimitSwitch}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === "ask" || value === "auto" || value === "off")
+                  updateSettings({ usageLimitSwitch: value });
+              }}
+              className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+            >
+              <option value="ask">Ask me</option>
+              <option value="auto">Switch automatically</option>
+              <option value="off">Off</option>
+            </select>
+          }
+        />
+        <SettingsRow
+          title="Account usage and history"
+          description="Quota readings, recorded work, and reset times across your accounts."
+          control={
+            <Link to="/usage" className="text-xs text-primary underline underline-offset-2">
+              Open Usage
+            </Link>
+          }
+        />
         {entries.length === 0 ? (
           <SettingsRow title="No usage providers configured." />
         ) : (

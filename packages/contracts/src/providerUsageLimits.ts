@@ -183,3 +183,31 @@ export const UsageLimitsReport = Schema.Struct({
   notices: Schema.Array(Schema.String),
 });
 export type UsageLimitsReport = typeof UsageLimitsReport.Type;
+
+/** Actual account readings, never reconstructed from a conversation's current account. */
+export const ProviderUsageHistoryInput = Schema.Struct({
+  days: Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 90 })),
+});
+export type ProviderUsageHistoryInput = typeof ProviderUsageHistoryInput.Type;
+export const ProviderUsageSample = Schema.Struct({
+  instanceId: ProviderInstanceId,
+  windowId: TrimmedNonEmptyString,
+  usedPercent: Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+  resetsAt: Schema.NullOr(IsoDateTime),
+  sampledAt: IsoDateTime,
+});
+export type ProviderUsageSample = typeof ProviderUsageSample.Type;
+export const ProviderDailyWork = Schema.Struct({
+  instanceId: ProviderInstanceId,
+  day: TrimmedNonEmptyString,
+  turns: NonNegativeInt,
+  inputTokens: NonNegativeInt,
+  outputTokens: NonNegativeInt,
+  incompleteTurns: NonNegativeInt,
+});
+export type ProviderDailyWork = typeof ProviderDailyWork.Type;
+export const ProviderUsageHistory = Schema.Struct({
+  samples: Schema.Array(ProviderUsageSample),
+  dailyWork: Schema.Array(ProviderDailyWork),
+});
+export type ProviderUsageHistory = typeof ProviderUsageHistory.Type;

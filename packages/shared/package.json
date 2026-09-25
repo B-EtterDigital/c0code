@@ -282,6 +282,10 @@
     "./providerSwitch": {
       "types": "./src/providerSwitch.ts",
       "import": "./src/providerSwitch.ts"
+    },
+    "./accountUsage": {
+      "types": "./src/accountUsage.ts",
+      "import": "./src/accountUsage.ts"
     }
   },
   "scripts": {

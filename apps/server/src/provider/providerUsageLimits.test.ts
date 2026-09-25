@@ -101,4 +101,8 @@ describe("resolveUsageLimitsAfterProbe", () => {
     expect(resolveUsageLimitsAfterProbe({ published, probed: unsupported })).toBe(unsupported);
     expect(resolveUsageLimitsAfterProbe({ published: undefined, probed: failed })).toBe(failed);
   });
+  it("does not replace a newer runtime reading with cached probe values", () => {
+    const cached = { ...published, checkedAt: "2026-09-03T11:59:00.000Z" };
+    expect(resolveUsageLimitsAfterProbe({ published, probed: cached })).toBe(published);
+  });
 });
