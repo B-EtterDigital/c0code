@@ -1,3 +1,6 @@
+import { quotaSwitchNotice } from "@t3tools/shared/providerSwitch";
+import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
+import { useQuotaSwitch } from "./chat/useQuotaSwitch";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
 import {
@@ -199,12 +202,15 @@ import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs } from "./RightPanelTabs";
 import { C0xModuleSurface } from "./c0x/C0xModuleSurface";
-import { C0xSessionPanel } from './c0x/C0xSessionPanel';
-import { C0xSessionDetailsToggle } from './c0x/C0xSessionDetailsToggle';
-import { C0X_SESSION_DETAILS_ID } from '~/c0x/sessionDetailsSurface';
-import { useSessionDetailOpeners } from '~/c0x/useSessionDetailOpeners';
+import { C0xSessionPanel } from "./c0x/C0xSessionPanel";
+import { C0xSessionDetailsToggle } from "./c0x/C0xSessionDetailsToggle";
+import { C0X_SESSION_DETAILS_ID } from "~/c0x/sessionDetailsSurface";
+import { useSessionDetailOpeners } from "~/c0x/useSessionDetailOpeners";
 import { c0xModuleById, postC0xShellEvent, registerC0xModuleOpener } from "~/c0x/nativeShell";
-import { snapshotC0xComposerMediaSubmission, acknowledgeC0xComposerMediaSubmission } from '~/c0x/composerMediaReceipts';
+import {
+  snapshotC0xComposerMediaSubmission,
+  acknowledgeC0xComposerMediaSubmission,
+} from "~/c0x/composerMediaReceipts";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useC0xComposer } from "~/c0x/composer";
 import { useC0xAgentSessionImport } from "~/c0x/agentSessions";
@@ -1440,6 +1446,8 @@ export default function ChatView(props: ChatViewProps) {
     reportFailure: false,
   });
   const startThreadTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
+  const quotaLastSubmission = useRef<Parameters<typeof startThreadTurn>[0] | null>(null);
+  const quotaRetriedTurn = useRef<string | null>(null);
   const createAttachmentAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
     refresh: true,
@@ -1511,6 +1519,7 @@ export default function ChatView(props: ChatViewProps) {
   }, [routeKind, routeThreadRef, routeThreadState]);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
   const settings = useEnvironmentSettings(environmentId);
+  const quotaSwitch = useQuotaSwitch(environmentId, routeThreadRef.threadId);
   const primaryServerSettings = useAtomValue(primaryServerSettingsAtom);
   const setStickyComposerModelSelection = useComposerDraftStore(
     (store) => store.setStickyModelSelection,
@@ -2628,6 +2637,7 @@ export default function ChatView(props: ChatViewProps) {
     conversationProviderStatus !== null &&
     conversationProviderStatus.supportsConversationRollback !== false;
   const phase = derivePhase(activeThread?.session ?? null);
+
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
   const latestCheckpointCompletedAt = activeThread?.checkpoints.at(-1)?.completedAt ?? null;
   const workspaceMutationId = useMemo(() => {
@@ -4155,8 +4165,12 @@ export default function ChatView(props: ChatViewProps) {
   );
   // The shell carries server PR updates even while thread detail is still loading.
   const sessionDetailOpeners = useSessionDetailOpeners({
-    threadRef: activeThreadRef, environmentId, workspaceRoot: activeWorkspaceRoot,
-    openFile: openFileSurface, openFileAttachment, openImage: setExpandedImage,
+    threadRef: activeThreadRef,
+    environmentId,
+    workspaceRoot: activeWorkspaceRoot,
+    openFile: openFileSurface,
+    openFileAttachment,
+    openImage: setExpandedImage,
   });
   const activeThreadMetadata = activeThreadShell ?? activeThread;
   const linkedThreadPullRequest =
@@ -4506,15 +4520,18 @@ export default function ChatView(props: ChatViewProps) {
   const closeAfterAgentBrowserConfirmation = useCallback(
     (surfaces: readonly RightPanelSurface[], closeSurfaces: () => void) => {
       const finishAfterModuleConfirmation = () => {
-        const titles = surfaces.flatMap((surface) => surface.kind === "c0x-module"
-          ? [c0xModuleById(surface.moduleId)?.title ?? "module"] : []);
+        const titles = surfaces.flatMap((surface) =>
+          surface.kind === "c0x-module" ? [c0xModuleById(surface.moduleId)?.title ?? "module"] : [],
+        );
         if (titles.length === 0) {
           closeSurfaces();
           return;
         }
         void requestConfirmDialog(`Close ${titles.join(", ")}?\nThis closes the module tabs.`, {
           rememberKey: "c0x:skip-module-close-confirmation:v1",
-        })?.then((confirmed) => { if (confirmed) closeSurfaces(); });
+        })?.then((confirmed) => {
+          if (confirmed) closeSurfaces();
+        });
       };
       const message = agentControlledBrowserCloseConfirmation(
         surfaces,
@@ -6579,7 +6596,7 @@ export default function ChatView(props: ChatViewProps) {
       return false;
     }
     const queuedDraft = queuedEntry ? hydrateFluidQueueEntry(queuedEntry) : null;
-    const sendCtx = queuedEntry
+    let sendCtx = queuedEntry
       ? {
           ...queuedEntry.sendContext,
           images: queuedDraft?.images ?? [],
@@ -6593,6 +6610,54 @@ export default function ChatView(props: ChatViewProps) {
     if (!sendCtx?.providerAvailable) {
       notifyDirectAnnotationAttached();
       return;
+    }
+    let announceQuotaSwitch: (() => void) | undefined;
+    const quotaInstanceId = sendCtx.selectedModelSelection.instanceId;
+    const quotaProvider = providerStatuses.find(
+      (provider) => provider.instanceId === quotaInstanceId,
+    );
+    if (
+      quotaProvider &&
+      (promptRef.current.trim() || sendCtx.images.length || sendCtx.files.length || queuedEntry)
+    ) {
+      const choice = await quotaSwitch.check(quotaProvider);
+      if (choice === null) return false;
+      if (choice) {
+        const target = providerStatuses.find(
+          (provider) => provider.instanceId === choice.instanceId,
+        );
+        const model = resolveAppModelSelectionForInstance(
+          choice.instanceId,
+          settings,
+          providerStatuses,
+          sendCtx.selectedModel,
+        );
+        if (!target?.enabled || !model) return false;
+        const selection = { instanceId: choice.instanceId, model };
+        setComposerDraftModelSelection(
+          scopeThreadRef(activeThread.environmentId, activeThread.id),
+          selection,
+          { explicit: true },
+        );
+        setStickyComposerModelSelection(selection);
+        const previousSelection = sendCtx.selectedModelSelection;
+        announceQuotaSwitch = () =>
+          quotaSwitch.announce(quotaSwitchNotice(choice.displayName, quotaProvider), () => {
+            setComposerDraftModelSelection(
+              scopeThreadRef(activeThread.environmentId, activeThread.id),
+              previousSelection,
+              { explicit: true },
+            );
+            setStickyComposerModelSelection(previousSelection);
+          });
+        sendCtx = {
+          ...sendCtx,
+          selectedModelSelection: selection,
+          selectedProvider: target.driver,
+          selectedModel: model,
+          selectedProviderModels: target.models,
+        };
+      }
     }
     const {
       images: sendContextImages,
@@ -6811,7 +6876,11 @@ export default function ChatView(props: ChatViewProps) {
     }
 
     const composerImagesSnapshot = [...composerImages];
-    const mediaSubmissionReceipt = snapshotC0xComposerMediaSubmission(composerDraftTarget, promptForSend, composerImagesSnapshot);
+    const mediaSubmissionReceipt = snapshotC0xComposerMediaSubmission(
+      composerDraftTarget,
+      promptForSend,
+      composerImagesSnapshot,
+    );
     const composerFilesSnapshot = [...composerFiles];
     const composerAttachmentsSnapshot = [...composerImagesSnapshot, ...composerFilesSnapshot];
     const composerTerminalContextsSnapshot = [...sendableComposerTerminalContexts];
@@ -7135,8 +7204,9 @@ export default function ChatView(props: ChatViewProps) {
       if (backgroundThreadRef) {
         beginBackgroundDraftSubmissionByRef(backgroundThreadRef);
       }
-      if (queuedEntry) await recordFluidQueueTurnRequest(routeThreadKey, queuedEntry.id, messageCreatedAt);
-      const startResult = await startThreadTurn({
+      if (queuedEntry)
+        await recordFluidQueueTurnRequest(routeThreadKey, queuedEntry.id, messageCreatedAt);
+      const turnRequest: Parameters<typeof startThreadTurn>[0] = {
         environmentId,
         input: {
           threadId: threadIdForSend,
@@ -7153,7 +7223,9 @@ export default function ChatView(props: ChatViewProps) {
           ...(bootstrap ? { bootstrap } : {}),
           createdAt: messageCreatedAt,
         },
-      });
+      };
+      quotaLastSubmission.current = turnRequest;
+      const startResult = await startThreadTurn(turnRequest);
       if (startResult._tag === "Failure") {
         if (backgroundThreadRef) {
           clearBackgroundDraftSubmissionByRef(backgroundThreadRef);
@@ -7161,6 +7233,7 @@ export default function ChatView(props: ChatViewProps) {
         failure = startResult;
       } else {
         turnStartSucceeded = true;
+        announceQuotaSwitch?.();
         acknowledgeC0xComposerMediaSubmission(mediaSubmissionReceipt);
         // The turn is under way and will spend quota, so that thread's limits
         // snapshot is stale. Uploads may have outlasted a navigation, so only
@@ -7298,6 +7371,102 @@ export default function ChatView(props: ChatViewProps) {
     }
     return turnStartSucceeded;
   };
+
+  useEffect(() => {
+    const latest = activeThread?.latestTurn;
+    const previous = quotaLastSubmission.current;
+    if (
+      !latest ||
+      latest.state !== "error" ||
+      !threadError?.includes("usage limit reached") ||
+      !previous ||
+      previous.environmentId !== environmentId ||
+      previous.input.threadId !== activeThread?.id ||
+      previous.input.createdAt !== latest.requestedAt ||
+      quotaRetriedTurn.current === latest.turnId
+    )
+      return;
+    const source = providerStatuses.find(
+      (provider) => provider.instanceId === previous.input.modelSelection?.instanceId,
+    );
+    if (!source) return;
+    quotaRetriedTurn.current = latest.turnId;
+    void quotaSwitch
+      .check(source, true)
+      .then(async (choice) => {
+        if (!choice || quotaLastSubmission.current !== previous) return;
+        const model = resolveAppModelSelectionForInstance(
+          choice.instanceId,
+          settings,
+          providerStatuses,
+          previous.input.modelSelection?.model,
+        );
+        if (!model) return;
+        const selection = { instanceId: choice.instanceId, model };
+        const { bootstrap: _bootstrap, ...input } = previous.input;
+        const retry = {
+          environmentId,
+          input: {
+            ...input,
+            modelSelection: selection,
+            createdAt: new Date().toISOString(),
+            message: { ...input.message, messageId: newMessageId() },
+          },
+        };
+        quotaLastSubmission.current = retry;
+        setComposerDraftModelSelection(scopeThreadRef(environmentId, input.threadId), selection, {
+          explicit: true,
+        });
+        const settingsResult = await persistThreadSettingsForNextTurn({
+          threadId: input.threadId,
+          createdAt: retry.input.createdAt,
+          modelSelection: selection,
+          runtimeMode: input.runtimeMode,
+          interactionMode: input.interactionMode,
+        });
+        const result =
+          settingsResult._tag === "Failure" ? settingsResult : await startThreadTurn(retry);
+        if (result._tag === "Success") {
+          quotaSwitch.announce(quotaSwitchNotice(choice.displayName, source), () => {
+            if (input.modelSelection)
+              setComposerDraftModelSelection(
+                scopeThreadRef(environmentId, input.threadId),
+                input.modelSelection,
+                { explicit: true },
+              );
+          });
+        }
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          setThreadError(
+            input.threadId,
+            error instanceof Error ? error.message : "Could not continue on the selected account.",
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error(
+          "[quota-switch] Failed to retry the limited turn",
+          safeErrorLogAttributes(error),
+        );
+        setThreadError(
+          previous.input.threadId,
+          "Could not continue on the selected account. Your original message is preserved in the conversation.",
+        );
+      });
+  }, [
+    activeThread,
+    environmentId,
+    threadError,
+    providerStatuses,
+    settings,
+    quotaSwitch.check,
+    quotaSwitch.announce,
+    startThreadTurn,
+    persistThreadSettingsForNextTurn,
+    setComposerDraftModelSelection,
+    setThreadError,
+  ]);
 
   const fluidQueueSendRef = useRef(onSend);
   fluidQueueSendRef.current = onSend;
@@ -8039,6 +8208,29 @@ export default function ChatView(props: ChatViewProps) {
         { explicit: true },
       );
       setStickyComposerModelSelection(nextModelSelection);
+      if (entry)
+        void quotaSwitch
+          .check(entry)
+          .then((choice) => {
+            if (!choice) return;
+            const alternativeModel = resolveAppModelSelectionForInstance(
+              choice.instanceId,
+              settings,
+              providerStatuses,
+              resolvedModel,
+            );
+            if (!alternativeModel) return;
+            const alternative = { instanceId: choice.instanceId, model: alternativeModel };
+            setComposerDraftModelSelection(
+              scopeThreadRef(activeThread.environmentId, activeThread.id),
+              alternative,
+              { explicit: true },
+            );
+            setStickyComposerModelSelection(alternative);
+          })
+          .catch((error: unknown) => {
+            console.error("[quota-switch] Account selection failed", safeErrorLogAttributes(error));
+          });
       scheduleComposerFocus();
     },
     [
@@ -8049,6 +8241,7 @@ export default function ChatView(props: ChatViewProps) {
       setStickyComposerModelSelection,
       providerStatuses,
       settings,
+      quotaSwitch.check,
     ],
   );
   const onEnvModeChange = useCallback(
@@ -8125,12 +8318,21 @@ export default function ChatView(props: ChatViewProps) {
 
   const panelToggleControls = (
     <PanelLayoutControls
-      sessionDetailsControl={c0xModuleById(C0X_SESSION_DETAILS_ID) ? (
-        <C0xSessionDetailsToggle key={routeThreadKey} thread={activeThread} plan={activePlan}
-          messages={timelineMessages} activities={threadActivities}
-          workspaceRoot={activeWorkspaceRoot} branch={activeThread.branch}
-          onOpenGit={isGitRepo ? addDiffSurface : undefined} {...sessionDetailOpeners} />
-      ) : undefined}
+      sessionDetailsControl={
+        c0xModuleById(C0X_SESSION_DETAILS_ID) ? (
+          <C0xSessionDetailsToggle
+            key={routeThreadKey}
+            thread={activeThread}
+            plan={activePlan}
+            messages={timelineMessages}
+            activities={threadActivities}
+            workspaceRoot={activeWorkspaceRoot}
+            branch={activeThread.branch}
+            onOpenGit={isGitRepo ? addDiffSurface : undefined}
+            {...sessionDetailOpeners}
+          />
+        ) : undefined
+      }
       terminalAvailable={activeProject !== null}
       terminalOpen={terminalUiState.terminalOpen}
       terminalShortcutLabel={shortcutLabelForCommand(keybindings, "terminal.toggle")}
@@ -8262,11 +8464,20 @@ export default function ChatView(props: ChatViewProps) {
       // C0X patch: a measurable host node — the C0VIBE shell projects the
       // module UI onto this surface's rect.
       renderedRightPanelSurface.moduleId === C0X_SESSION_DETAILS_ID ? (
-        <C0xSessionPanel key={routeThreadKey} thread={activeThread} plan={activePlan}
-          messages={timelineMessages} activities={threadActivities}
-          workspaceRoot={activeWorkspaceRoot} branch={activeThread.branch}
-          onOpenGit={isGitRepo ? addDiffSurface : undefined} {...sessionDetailOpeners} />
-      ) : <C0xModuleSurface moduleId={renderedRightPanelSurface.moduleId} />
+        <C0xSessionPanel
+          key={routeThreadKey}
+          thread={activeThread}
+          plan={activePlan}
+          messages={timelineMessages}
+          activities={threadActivities}
+          workspaceRoot={activeWorkspaceRoot}
+          branch={activeThread.branch}
+          onOpenGit={isGitRepo ? addDiffSurface : undefined}
+          {...sessionDetailOpeners}
+        />
+      ) : (
+        <C0xModuleSurface moduleId={renderedRightPanelSurface.moduleId} />
+      )
     ) : renderedRightPanelSurface?.kind === "agents" ? (
       <AgentsPanel
         model={agentPanelModel}
@@ -8532,6 +8743,7 @@ export default function ChatView(props: ChatViewProps) {
                     </div>
                   ) : null}
                   <div
+                    ref={quotaSwitch.anchorRef}
                     className="relative"
                     style={
                       forceExpandedMobileComposer
@@ -8539,6 +8751,22 @@ export default function ChatView(props: ChatViewProps) {
                         : undefined
                     }
                   >
+                    {quotaSwitch.dialog}
+                    {quotaSwitch.notice ? (
+                      <div
+                        role="status"
+                        className="flex items-center justify-between gap-2 p-2 text-xs text-muted-foreground"
+                      >
+                        <span>{quotaSwitch.notice}</span>
+                        <button
+                          type="button"
+                          onClick={quotaSwitch.undo}
+                          aria-label="Use the previous account for the next message"
+                        >
+                          Undo
+                        </button>
+                      </div>
+                    ) : null}
                     <ComposerSurface.Shell contextStrip={showComposerContextStrip}>
                       <ComposerSurface.Host>
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">

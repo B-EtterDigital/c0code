@@ -26,6 +26,7 @@ interface CodexRateLimitWindow {
 
 /** Structural view of the generated `RateLimitSnapshot`; both messages satisfy it. */
 export interface CodexRateLimitSnapshot {
+  readonly ordinaryUsageAllowed?: boolean | null;
   readonly limitId?: string | null;
   readonly planType?: string | null;
   readonly rateLimitReachedType?: string | null;
@@ -125,12 +126,15 @@ export function codexRateLimitsToLimits(input: {
   const resetCredits = codexResetCreditsToContract(input.resetCredits);
   // Select the main bucket explicitly; the legacy snapshot can name another limit.
   const windows = codexRateLimitsToWindows(input.rateLimitsByLimitId?.codex ?? input.snapshot);
+  const ordinaryUsageAllowed = (input.rateLimitsByLimitId?.codex ?? input.snapshot)
+    .ordinaryUsageAllowed;
   return {
     ...makeUsageLimits({
       checkedAt: input.checkedAt,
       windows,
     }),
     ...(resetCredits ? { resetCredits } : {}),
+    ...(typeof ordinaryUsageAllowed === "boolean" ? { ordinaryUsageAllowed } : {}),
   };
 }
 
@@ -138,7 +142,10 @@ export function codexRateLimitsToUpdate(
   snapshot: CodexRateLimitSnapshot,
 ): ProviderUsageLimitsUpdate | undefined {
   const windows = codexRateLimitsToWindows(snapshot);
-  return windows.length > 0 ? { windows } : undefined;
+  const ordinaryUsageAllowed = snapshot.ordinaryUsageAllowed;
+  return windows.length > 0 || typeof ordinaryUsageAllowed === "boolean"
+    ? { windows, ...(typeof ordinaryUsageAllowed === "boolean" ? { ordinaryUsageAllowed } : {}) }
+    : undefined;
 }
 
 /**

@@ -1056,6 +1056,9 @@ export const ServerSettings = Schema.Struct({
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   // Keyed by a user-chosen id so a source keeps its rows across edits. Entries
   // this build cannot decode round-trip untouched, as provider instances do.
+  usageLimitSwitch: Schema.Literals(["ask", "auto", "off"]).pipe(
+    Schema.withDecodingDefault(Effect.succeed("ask" as const)),
+  ),
   usageLimitSources: Schema.Record(UsageLimitSourceId, UsageLimitSourceConfig).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
@@ -1284,6 +1287,7 @@ export const ServerSettingsPatch = Schema.Struct({
   // Per-entry, unlike `providerInstances`: a client only ever adds or removes
   // one source, and sending the whole map races another edit that has not
   // echoed back yet. `null` removes; the server merges into its current map.
+  usageLimitSwitch: Schema.optionalKey(Schema.Literals(["ask", "auto", "off"])),
   usageLimitSources: Schema.optionalKey(
     Schema.Record(UsageLimitSourceId, Schema.NullOr(UsageLimitSourceConfig)),
   ),

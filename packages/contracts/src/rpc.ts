@@ -220,6 +220,8 @@ import {
   UsageLimitSourceError,
   ProviderConsumeResetCreditInput,
   ProviderConsumeResetCreditResult,
+  ProviderSwitchCandidate,
+  ProviderSwitchCandidatesInput,
 } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
@@ -261,6 +263,7 @@ export const WS_METHODS = {
   providerUploadFeedback: "provider.uploadFeedback",
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
+  providerSwitchCandidates: "provider.switchCandidates",
   providerAuthComplete: "provider.auth.complete",
   providerAuthCancel: "provider.auth.cancel",
   providerAuthLogout: "provider.auth.logout",
@@ -434,6 +437,12 @@ const WsProviderConsumeResetCreditRpc = Rpc.make(WS_METHODS.providerConsumeReset
   payload: ProviderConsumeResetCreditInput,
   success: ProviderConsumeResetCreditResult,
   error: Schema.Union([ProviderSetupError, UsageLimitSourceError, EnvironmentAuthorizationError]),
+});
+
+const WsProviderSwitchCandidatesRpc = Rpc.make(WS_METHODS.providerSwitchCandidates, {
+  payload: ProviderSwitchCandidatesInput,
+  success: Schema.Array(ProviderSwitchCandidate),
+  error: Schema.Union([UsageLimitSourceError, EnvironmentAuthorizationError]),
 });
 
 const WsProviderAuthStartRpc = Rpc.make(WS_METHODS.providerAuthStart, {
@@ -1187,6 +1196,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRefreshProvidersRpc,
   WsServerUpdateProviderRpc,
   WsProviderConsumeResetCreditRpc,
+  WsProviderSwitchCandidatesRpc,
   WsProviderAuthStartRpc,
   WsProviderAuthCompleteRpc,
   WsProviderAuthCancelRpc,
