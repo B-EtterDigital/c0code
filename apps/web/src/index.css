@@ -1547,6 +1547,14 @@ body {
   --desktop-window-right-resize-inset: 6px;
 }
 
+/* Chromium's GPU compositor on Linux loses masked scroll viewports: rows go
+   invisible while staying clickable, so the sidebar flickers (#7766). Scroll
+   areas keep hard edges there until Chromium handles the stacked fade masks. */
+.electron-linux [data-slot="scroll-area-viewport"] {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 /* App-chrome grain. Baked into each surface's own background (behind
    content) rather than a fixed overlay on top: a full-viewport overlay
    forces the compositor to re-blend every frame any animation produces,
