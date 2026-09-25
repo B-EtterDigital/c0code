@@ -180,7 +180,9 @@ describe("EnvironmentProviderSettings routing", () => {
     settingsSearchState.targetId = null;
     settingsSearchState.effects = [];
     commands.refresh.mockReset().mockResolvedValue({ _tag: "Success" });
-    commands.updateProvider.mockReset().mockResolvedValue({ _tag: "Success" });
+    commands.updateProvider
+      .mockReset()
+      .mockResolvedValue({ _tag: "Success", value: { providers: [] } });
   });
 
   it("coalesces a nullable provider snapshot before rendering array-backed UI", () => {
@@ -189,7 +191,7 @@ describe("EnvironmentProviderSettings routing", () => {
     expect(settingsState.updateEnvironmentIds).toEqual([environmentId]);
   });
 
-  it("routes refresh and provider update commands to the selected environment", async () => {
+  it("routes refresh and list-row provider updates to the selected environment", async () => {
     atoms.providers = [provider()];
     const panel = renderPanel();
     const refreshButton = visitElements(panel, isRefreshButton);
@@ -205,7 +207,9 @@ describe("EnvironmentProviderSettings routing", () => {
     const providerCard = visitElements(
       panel,
       (element) =>
-        element.props.instanceId === codexId && typeof element.props.onRunUpdate === "function",
+        element.props.instanceId === codexId &&
+        element.props.mode === "list" &&
+        typeof element.props.onRunUpdate === "function",
     );
     expect(providerCard).not.toBeNull();
     (providerCard?.props.onRunUpdate as (() => void) | undefined)?.();

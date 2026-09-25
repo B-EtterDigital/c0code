@@ -665,6 +665,25 @@ export function EnvironmentProviderSettings({
           }),
         );
       }
+      if (result._tag === "Success") {
+        const state = result.value.providers.find(
+          (provider) => provider.instanceId === candidate.instanceId,
+        )?.updateState;
+        toastManager.add(
+          stackedThreadToast({
+            type:
+              state?.status === "succeeded"
+                ? "success"
+                : state?.status === "failed"
+                  ? "error"
+                  : "info",
+            title: state?.status === "succeeded" ? "Provider updated" : "Provider update",
+            description:
+              state?.message ??
+              "Update request accepted. Check the provider status for its result.",
+          }),
+        );
+      }
       updatingInstanceIdsRef.current.delete(candidate.instanceId);
       setUpdatingProviderInstanceIds((previous) => {
         if (!previous.has(candidate.instanceId)) {
@@ -958,16 +977,22 @@ export function EnvironmentProviderSettings({
             modelOrder,
           })
         }
+        sharedUpdate={
+          rows.filter(
+            (candidate) =>
+              candidate.driver === row.driver &&
+              configuredBinaryPath(candidate.instance.config) ===
+                configuredBinaryPath(row.instance.config),
+          ).length > 1
+        }
         onRunUpdate={
-          mode === "editor" && showInlineUpdateButton && updateCandidate
+          showInlineUpdateButton && updateCandidate
             ? () => {
                 if (canRunInlineUpdate) void runProviderUpdate(updateCandidate);
               }
             : undefined
         }
-        isUpdating={
-          mode === "editor" && showInlineUpdateButton ? isInstanceUpdateRunning : undefined
-        }
+        isUpdating={showInlineUpdateButton ? isInstanceUpdateRunning : undefined}
       />
     );
   };
