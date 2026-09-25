@@ -403,14 +403,17 @@ export const withCodexAppServerClient = Effect.fn("withCodexAppServerClient")(fu
   return { client, initialize };
 });
 
-const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(function* (input: {
-  readonly binaryPath: string;
-  readonly homePath?: string;
-  readonly launchArgs?: string;
-  readonly cwd: string;
-  readonly customModels?: ReadonlyArray<CustomModelSetting>;
-  readonly environment?: NodeJS.ProcessEnv;
-}) {
+const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(function* (
+  input: {
+    readonly binaryPath: string;
+    readonly homePath?: string;
+    readonly launchArgs?: string;
+    readonly cwd: string;
+    readonly customModels?: ReadonlyArray<CustomModelSetting>;
+    readonly environment?: NodeJS.ProcessEnv;
+  },
+  usageOnly = false,
+) {
   const { client, initialize } = yield* withCodexAppServerClient(input);
 
   // Extract the version string after the first '/' in userAgent, up to the next space or the end
@@ -429,10 +432,8 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
 
   const [skillsResponse, models, rateLimits] = yield* Effect.all(
     [
-      client.request("skills/list", {
-        cwds: [input.cwd],
-      }),
-      requestAllCodexModels(client),
+      usageOnly ? Effect.succeed(null) : client.request("skills/list", { cwds: [input.cwd] }),
+      usageOnly ? Effect.succeed([]) : requestAllCodexModels(client),
       // Usage is an enrichment: a failure or a slow answer degrades to "no
       // usage this probe" rather than costing the account and models.
       client.request("account/rateLimits/read", undefined).pipe(
@@ -464,7 +465,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     models: applyPreferredCodexDefaultModel(
       appendCustomCodexModels(models, input.customModels ?? []),
     ),
-    skills: parseCodexSkillsListResponse(skillsResponse, input.cwd),
+    skills: skillsResponse ? parseCodexSkillsListResponse(skillsResponse, input.cwd) : [],
   } satisfies CodexAppServerProviderSnapshot;
 });
 
@@ -551,6 +552,9 @@ function accountProbeStatus(account: CodexAppServerProviderSnapshot["account"]):
 
   return { status: "ready", auth };
 }
+
+export const probeCodexAccountUsage = (input: Parameters<typeof probeCodexAppServerProvider>[0]) =>
+  probeCodexAppServerProvider(input, true);
 
 export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(function* (
   codexSettings: CodexSettings,

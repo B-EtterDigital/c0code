@@ -3,6 +3,7 @@ import {
   withUsageLimitsCommands,
 } from "@t3tools/shared/usageLimits";
 import * as Cause from "effect/Cause";
+import { makeProviderSwitchCandidates } from "./provider/providerSwitchCandidates.ts";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -523,6 +524,11 @@ const makeWsRpcLayer = (
       const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
       const providerService = yield* ProviderService.ProviderService;
       const providerSessionDirectory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
+      const providerSwitchCandidates = yield* makeProviderSwitchCandidates({
+        registry: providerRegistry,
+        service: providerService,
+        directory: providerSessionDirectory,
+      });
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
       const providerAuth = yield* ProviderAuthService;
       const providerInstances = yield* ProviderInstanceRegistry;
@@ -1844,6 +1850,10 @@ const makeWsRpcLayer = (
               "rpc.aggregate": "server",
             },
           ),
+        [WS_METHODS.providerSwitchCandidates]: (input) =>
+          observeRpcEffect(WS_METHODS.providerSwitchCandidates, providerSwitchCandidates(input), {
+            "rpc.aggregate": "provider",
+          }),
         [WS_METHODS.providerConsumeResetCredit]: (input) =>
           observeRpcEffect(
             WS_METHODS.providerConsumeResetCredit,

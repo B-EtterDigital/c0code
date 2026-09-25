@@ -4,6 +4,7 @@ import {
   ForwardCompatibleArray,
   IsoDateTime,
   NonNegativeInt,
+  ThreadId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
@@ -49,6 +50,7 @@ export type ServerProviderResetCredits = typeof ServerProviderResetCredits.Type;
  */
 export const ServerProviderUsageLimits = Schema.Struct({
   checkedAt: IsoDateTime,
+  ordinaryUsageAllowed: Schema.optional(Schema.Boolean),
   windows: ForwardCompatibleArray(ServerProviderUsageWindow),
   resetCredits: Schema.optional(ServerProviderResetCredits),
   unavailable: Schema.optional(
@@ -60,6 +62,21 @@ export const ServerProviderUsageLimits = Schema.Struct({
 });
 export type ServerProviderUsageLimits = typeof ServerProviderUsageLimits.Type;
 
+export const ProviderSwitchCandidate = Schema.Struct({
+  instanceId: ProviderInstanceId,
+  driver: ProviderDriverKind,
+  displayName: TrimmedNonEmptyString,
+  enabled: Schema.Boolean,
+  keepsConversation: Schema.Boolean,
+  usageLimits: Schema.optional(ServerProviderUsageLimits),
+});
+export type ProviderSwitchCandidate = typeof ProviderSwitchCandidate.Type;
+export const ProviderSwitchCandidatesInput = Schema.Struct({
+  threadId: ThreadId,
+  instanceId: ProviderInstanceId,
+});
+export type ProviderSwitchCandidatesInput = typeof ProviderSwitchCandidatesInput.Type;
+
 /**
  * What an adapter reports when its runtime pushes a rate-limit update during
  * a turn. Sparse by contract: Claude's `rate_limit_event` names one window at
@@ -67,6 +84,7 @@ export type ServerProviderUsageLimits = typeof ServerProviderUsageLimits.Type;
  * `id` onto the instance's published snapshot; omitted windows are unchanged.
  */
 export const ProviderUsageLimitsUpdate = Schema.Struct({
+  ordinaryUsageAllowed: Schema.optional(Schema.Boolean),
   windows: Schema.Array(ServerProviderUsageWindow),
 });
 export type ProviderUsageLimitsUpdate = typeof ProviderUsageLimitsUpdate.Type;

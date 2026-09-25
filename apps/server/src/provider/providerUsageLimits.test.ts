@@ -21,6 +21,21 @@ const weekly = {
 const published = { checkedAt, windows: [session, weekly] };
 
 describe("applyUsageLimitsUpdate", () => {
+  it("retains and clears an explicit usage denial even without window changes", () => {
+    const denied = applyUsageLimitsUpdate({
+      previous: published,
+      checkedAt,
+      update: { windows: [], ordinaryUsageAllowed: false },
+    });
+    expect(denied?.ordinaryUsageAllowed).toBe(false);
+    expect(denied?.windows).toEqual(published.windows);
+    const recovered = applyUsageLimitsUpdate({
+      previous: denied,
+      checkedAt,
+      update: { windows: [], ordinaryUsageAllowed: true },
+    });
+    expect(recovered?.ordinaryUsageAllowed).toBe(true);
+  });
   it("returns the published object itself when no window moved", () => {
     // Codex repeats the same numbers beside every token-usage tick; the
     // ingestion path relies on identity to skip the publish.
