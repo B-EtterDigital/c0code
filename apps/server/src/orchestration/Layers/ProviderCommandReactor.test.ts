@@ -169,6 +169,7 @@ describe("ProviderCommandReactor", () => {
     readonly baseDir?: string;
     readonly threadModelSelection?: ModelSelection;
     readonly sessionModelSwitch?: "unsupported" | "in-session";
+    readonly previousInstanceRemoved?: boolean;
     readonly requiresNewThreadForModelChange?: boolean;
     readonly unreadableHistory?: boolean;
     readonly titleRegenerationCompletionDispatchFailures?: number;
@@ -364,7 +365,21 @@ describe("ProviderCommandReactor", () => {
           sessionModelSwitch: input?.sessionModelSwitch ?? "in-session",
         }),
       assertConversationRollbackSupported: () => unsupported(),
-      getInstanceInfo: (instanceId) => {
+      getInstanceInfo: (instanceId, bindingThreadId) => {
+        if (
+          input?.previousInstanceRemoved &&
+          instanceId === modelSelection.instanceId &&
+          bindingThreadId === undefined
+        ) {
+          return Effect.fail(
+            new ProviderAdapterRequestError({
+              provider: ProviderDriverKind.make("codex"),
+              method: "getInstanceInfo",
+              detail:
+                "Previous account is no longer runnable; its identity is retained on the thread binding.",
+            }),
+          );
+        }
         const raw = String(instanceId);
         const driverKind = ProviderDriverKind.make(
           raw.startsWith("claude")
@@ -2730,6 +2745,60 @@ describe("ProviderCommandReactor", () => {
     expect(harness.startSession.mock.calls.length).toBe(1);
     expect(harness.stopSession.mock.calls.length).toBe(0);
   });
+
+  effectIt.effect(
+    "starts a stopped thread on another account when only its binding identifies the old account",
+    () =>
+      Effect.gen(function* () {
+        const harness = yield* Effect.promise(() =>
+          createHarness({ previousInstanceRemoved: true }),
+        );
+        const now = "2026-01-01T00:00:00.000Z";
+        yield* harness.engine.dispatch({
+          type: "thread.session.set",
+          commandId: CommandId.make("stopped-old-account"),
+          threadId: ThreadId.make("thread-1"),
+          session: {
+            threadId: ThreadId.make("thread-1"),
+            status: "stopped",
+            providerName: "codex",
+            providerInstanceId: ProviderInstanceId.make("codex"),
+            runtimeMode: "approval-required",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: now,
+          },
+          createdAt: now,
+        });
+        yield* harness.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.make("switch-removed-account"),
+          threadId: ThreadId.make("thread-1"),
+          message: {
+            messageId: asMessageId("switch-removed-account-message"),
+            role: "user",
+            text: "continue",
+            attachments: [],
+          },
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex_work"),
+            model: "gpt-5-codex",
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required",
+          createdAt: now,
+        });
+        yield* Effect.promise(() => harness.drain());
+        expect(harness.sendTurn).toHaveBeenCalledTimes(1);
+        expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
+          providerInstanceId: ProviderInstanceId.make("codex_work"),
+        });
+        const thread = (yield* Effect.promise(() => harness.readModel())).threads.find(
+          (entry) => entry.id === ThreadId.make("thread-1"),
+        );
+        expect(thread?.session?.providerInstanceId).toBe(ProviderInstanceId.make("codex_work"));
+      }),
+  );
 
   it("restarts an existing Codex thread on a compatible requested instance", async () => {
     const harness = await createHarness();

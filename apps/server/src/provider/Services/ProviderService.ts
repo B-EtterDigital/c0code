@@ -104,6 +104,7 @@ export interface ProviderServiceShape {
 
   readonly getInstanceInfo: (
     instanceId: ProviderInstanceId,
+    threadId?: ThreadId,
   ) => Effect.Effect<ProviderInstanceRoutingInfo, ProviderServiceError>;
 
   /**

@@ -619,7 +619,7 @@ const make = Effect.gen(function* () {
         : thread.modelSelection.instanceId;
     const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
     const desiredInstanceId = desiredModelSelection.instanceId;
-    const currentInfo = yield* providerService.getInstanceInfo(currentInstanceId).pipe(
+    const currentInfo = yield* providerService.getInstanceInfo(currentInstanceId, threadId).pipe(
       Effect.mapError(
         () =>
           new ProviderAdapterRequestError({
