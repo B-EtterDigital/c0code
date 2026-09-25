@@ -56,6 +56,7 @@ function ScrollArea({
             "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         )}
         data-slot="scroll-area-viewport"
+        data-scroll-fade={scrollFade ? "" : undefined}
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
