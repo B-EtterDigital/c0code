@@ -767,6 +767,26 @@ export function runtimeEventToActivities(
       ];
     }
 
+    case "turn.completed":
+    case "turn.aborted": {
+      if (!event.providerInstanceId || !event.turnId) return [];
+      return [
+        {
+          id: event.eventId,
+          createdAt: event.createdAt,
+          tone: "info",
+          kind: "turn.usage",
+          summary: "Turn usage recorded",
+          payload: {
+            providerInstanceId: event.providerInstanceId,
+            tokenUsage: event.payload.tokenUsage ?? { usageStatus: "unavailable" },
+          },
+          turnId: toTurnId(event.turnId) ?? null,
+          ...maybeSequence,
+        },
+      ];
+    }
+
     case "thread.token-usage.updated": {
       const payload = buildContextWindowActivityPayload(event);
       if (!payload) {

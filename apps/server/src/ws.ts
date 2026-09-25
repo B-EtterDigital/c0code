@@ -1,3 +1,4 @@
+import { ProviderUsageHistory } from "./usage/ProviderUsageHistory.ts";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -617,6 +618,7 @@ const makeWsRpcLayer = (
       const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
       const resourceTelemetry = yield* ResourceTelemetry.ResourceTelemetry;
       const usage = yield* UsageService.UsageService;
+      const providerUsageHistory = yield* ProviderUsageHistory;
       const relayClient = yield* RelayClient.RelayClient;
       const authorizationError = (requiredScope: AuthEnvironmentScope) =>
         new EnvironmentAuthorizationError({
@@ -2050,6 +2052,14 @@ const makeWsRpcLayer = (
           observeRpcEffect(
             WS_METHODS.serverGetResourceTelemetryHistory,
             resourceTelemetry.readHistory(input),
+            {
+              "rpc.aggregate": "server",
+            },
+          ),
+        [WS_METHODS.serverGetProviderUsageHistory]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.serverGetProviderUsageHistory,
+            providerUsageHistory.read(input.days),
             {
               "rpc.aggregate": "server",
             },
