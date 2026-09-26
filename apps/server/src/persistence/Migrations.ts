@@ -10,6 +10,8 @@
 
 import * as Migrator from "effect/unstable/sql/Migrator";
 import * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 // Import all migrations statically
 import Migration0001 from "./Migrations/001_OrchestrationEvents.ts";
@@ -61,8 +63,13 @@ import Migration0046 from "./Migrations/046_RepairAutomaticSettlementTimestamps.
 import Migration0047 from "./Migrations/047_ProjectionProjectIcon.ts";
 import Migration0048 from "./Migrations/048_ProjectionThreadBranchPullRequest.ts";
 import Migration0049 from "./Migrations/049_ProjectionThreadsActiveOrderKey.ts";
-import Migration0051 from "./Migrations/051_ProviderUsageSamples.ts";
-import Migration0050 from "./Migrations/050_ProviderSessionContinuationKey.ts";
+import Migration0050 from "./Migrations/050_ProjectionThreadPullRequests.ts";
+import Migration0051 from "./Migrations/051_ProjectionThreadMessageContext.ts";
+import Migration0052 from "./Migrations/052_ProjectionThreadTitleState.ts";
+import Migration0053 from "./Migrations/053_PullRequestFilesViewed.ts";
+import Migration0054 from "./Migrations/054_ProjectionThreadsAutoSettleDisabledAt.ts";
+import Migration0055 from "./Migrations/055_ProviderSessionContinuationKey.ts";
+import Migration0056 from "./Migrations/056_ProviderUsageSamples.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -124,8 +131,13 @@ const migrationEntries = [
   [47, "ProjectionProjectIcon", Migration0047],
   [48, "ProjectionThreadBranchPullRequest", Migration0048],
   [49, "ProjectionThreadsActiveOrderKey", Migration0049],
-  [50, "ProviderSessionContinuationKey", Migration0050],
-  [51, "ProviderUsageSamples", Migration0051],
+  [50, "ProjectionThreadPullRequests", Migration0050],
+  [51, "ProjectionThreadMessageContext", Migration0051],
+  [52, "ProjectionThreadTitleState", Migration0052],
+  [53, "PullRequestFilesViewed", Migration0053],
+  [54, "ProjectionThreadsAutoSettleDisabledAt", Migration0054],
+  [55, "ProviderSessionContinuationKey", Migration0055],
+  [56, "ProviderUsageSamples", Migration0056],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
@@ -145,6 +157,10 @@ const makeMigrationLoader = (throughId?: number) =>
  */
 const run = Migrator.make({});
 
+export class MigrationLineageError extends Data.TaggedError("MigrationLineageError")<{
+  readonly message: string;
+}> {}
+
 export interface RunMigrationsOptions {
   readonly toMigrationInclusive?: number | undefined;
 }
@@ -162,6 +178,23 @@ export interface RunMigrationsOptions {
 export const runMigrations = Effect.fn("runMigrations")(function* ({
   toMigrationInclusive,
 }: RunMigrationsOptions = {}) {
+  const sql = yield* SqlClient.SqlClient;
+  const ledger =
+    yield* sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'effect_sql_migrations'`;
+  if (ledger.length > 0) {
+    const applied = yield* sql<{
+      migration_id: number;
+      name: string;
+    }>`SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id`;
+    for (const row of applied) {
+      const expected = migrationEntries.find(([id]) => id === row.migration_id)?.[1];
+      if (expected !== row.name) {
+        const message = `Incompatible database migration ${row.migration_id}: found ${row.name}, expected ${expected ?? "a newer application build"}. The database has not been migrated. Preserve this profile and use a compatible build or a pre-migration backup.`;
+        yield* Effect.logError(message);
+        return yield* Effect.fail(new MigrationLineageError({ message }));
+      }
+    }
+  }
   const executedMigrations = yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });
   const migrations = executedMigrations.map(([id, name]) => `${id}_${name}`);
   yield* migrations.length === 0
