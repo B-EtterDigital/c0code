@@ -11,6 +11,8 @@
  */
 import { withC0CodeTaskInstructions } from "../c0xTaskInstructions.ts";
 import {
+  CodexSettings,
+  resolveProviderInstanceEnabled,
   EventId,
   MessageId,
   ModelSelection,
@@ -44,12 +46,14 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as Stream from "effect/Stream";
 
+import { resolveCodexHomeLayout } from "../Drivers/CodexHomeLayout.ts";
 import { appendUserInputAttachmentPaths } from "../userInputAttachments.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import * as ServerConfig from "../../config.ts";
@@ -487,6 +491,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     options?.revokeMcpCredential ?? McpSessionRegistry.revokeActiveMcpThread;
   const c0vibeModuleScope = options?.c0vibeModuleScope ?? C0VibeModuleScopeClient;
   const fileSystem = yield* FileSystem.FileSystem;
+  const pathService = yield* Path.Path;
   const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
   const pendingCompactions = new Map<ThreadId, PendingCompaction>();
   const timedOutNativeCompactions = new Set<ThreadId>();
@@ -1040,6 +1045,71 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           ),
         );
 
+  const getInstanceInfo: ProviderServiceMethod<"getInstanceInfo"> = Effect.fn(
+    "ProviderService.getInstanceInfo",
+  )(function* (instanceId, threadId) {
+    // A binding describes the store that created the cursor, even if settings
+    // now point the same instance id at a different home.
+    if (threadId !== undefined) {
+      const binding = Option.getOrUndefined(yield* directory.getBinding(threadId));
+      if (binding?.providerInstanceId === instanceId && binding.continuationKey != null) {
+        return {
+          instanceId,
+          driverKind: binding.provider,
+          displayName: undefined,
+          enabled: false,
+          continuationIdentity: {
+            driverKind: binding.provider,
+            continuationKey: binding.continuationKey,
+          },
+        };
+      }
+    }
+    return yield* registry.getInstanceInfo(instanceId).pipe(
+      Effect.catchTag("ProviderUnsupportedError", (cause) =>
+        Effect.gen(function* () {
+          const settings = yield* serverSettings.getSettings.pipe(
+            Effect.mapError(
+              (error) =>
+                new ProviderValidationError({
+                  operation: "ProviderService.getInstanceInfo",
+                  issue: "Cannot read provider settings.",
+                  cause: error,
+                }),
+            ),
+          );
+          const configured = settings.providerInstances[instanceId];
+          // Codex has a config-derived shared store. Other drivers must retain
+          // their persisted identity instead of guessing a compatible store.
+          if (configured?.driver !== "codex") return yield* cause;
+          const config = yield* Schema.decodeUnknownEffect(CodexSettings)(configured.config).pipe(
+            Effect.mapError(
+              (error) =>
+                new ProviderValidationError({
+                  operation: "ProviderService.getInstanceInfo",
+                  issue: `Invalid Codex settings for '${instanceId}'.`,
+                  cause: error,
+                }),
+            ),
+          );
+          const layout = yield* resolveCodexHomeLayout(config).pipe(
+            Effect.provideService(Path.Path, pathService),
+          );
+          return {
+            instanceId,
+            driverKind: configured.driver,
+            displayName: configured.displayName,
+            enabled: resolveProviderInstanceEnabled(configured),
+            continuationIdentity: {
+              driverKind: configured.driver,
+              continuationKey: layout.continuationKey,
+            },
+          };
+        }),
+      ),
+    );
+  });
+
   const upsertSessionBinding = (
     session: ProviderSession,
     threadId: ThreadId,
@@ -1055,10 +1125,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         "ProviderService.upsertSessionBinding",
         session,
       );
+      const info = yield* getInstanceInfo(providerInstanceId);
       yield* directory.upsert({
         threadId,
         provider: session.provider,
         providerInstanceId,
+        continuationKey: info.continuationIdentity.continuationKey,
         runtimeMode: session.runtimeMode,
         status: toRuntimeStatus(session),
         ...(session.resumeCursor !== undefined ? { resumeCursor: session.resumeCursor } : {}),
@@ -1396,44 +1468,41 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           );
         }
         const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
+        let canResumePersisted = persistedBinding?.providerInstanceId === resolvedInstanceId;
         if (
-          persistedBinding?.provider === resolvedProvider &&
-          persistedBinding.providerInstanceId !== resolvedInstanceId &&
+          persistedBinding &&
           (input.resumeCursor != null || persistedBinding.resumeCursor != null)
         ) {
           const previousInstanceId = yield* requireBindingInstanceId(
             "ProviderService.startSession",
             persistedBinding,
           );
-          const previousInfo = yield* registry.getInstanceInfo(previousInstanceId);
-          if (
-            previousInfo.continuationIdentity.continuationKey !==
-            instanceInfo.continuationIdentity.continuationKey
-          ) {
+          const previousInfo = yield* getInstanceInfo(previousInstanceId, threadId);
+          canResumePersisted =
+            persistedBinding.provider === resolvedProvider &&
+            previousInfo.continuationIdentity.continuationKey ===
+              instanceInfo.continuationIdentity.continuationKey;
+          if (!canResumePersisted) {
             return yield* toValidationError(
               "ProviderService.startSession",
-              `Thread '${threadId}' cannot switch from instance '${previousInstanceId}' to '${resolvedInstanceId}' because their provider resume state is incompatible.`,
+              `Thread '${threadId}' cannot switch from instance '${previousInstanceId}' to '${resolvedInstanceId}' because their provider resume state is incompatible. Fork into a new thread to use this account.`,
             );
           }
         }
         const effectiveResumeCursor =
-          input.resumeCursor ??
-          (persistedBinding?.providerInstanceId === resolvedInstanceId
-            ? persistedBinding.resumeCursor
-            : undefined);
+          input.resumeCursor ?? (canResumePersisted ? persistedBinding?.resumeCursor : undefined);
         const effectiveCwd =
           input.cwd ??
-          (persistedBinding?.providerInstanceId === resolvedInstanceId
-            ? readPersistedCwd(persistedBinding.runtimePayload)
-            : undefined);
+          (canResumePersisted ? readPersistedCwd(persistedBinding?.runtimePayload) : undefined);
         yield* Effect.annotateCurrentSpan({
           "provider.kind": resolvedProvider,
           "provider.resume_cursor.source":
             input.resumeCursor !== undefined
               ? "request"
-              : effectiveResumeCursor !== undefined &&
-                  persistedBinding?.providerInstanceId === resolvedInstanceId
-                ? "persisted"
+              : effectiveResumeCursor != null
+                ? persistedBinding?.providerInstanceId === resolvedInstanceId
+                  ? "persisted"
+                  : "persisted-continuation"
                 : "none",
           "provider.resume_cursor.present": effectiveResumeCursor !== undefined,
           "provider.cwd.source":
@@ -2125,9 +2194,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const getCapabilities: ProviderServiceMethod<"getCapabilities"> = (instanceId) =>
     registry.getByInstance(instanceId).pipe(Effect.map((adapter) => adapter.capabilities));
-
-  const getInstanceInfo: ProviderServiceMethod<"getInstanceInfo"> = (instanceId) =>
-    registry.getInstanceInfo(instanceId);
 
   const assertConversationRollbackSupported: ProviderServiceMethod<"assertConversationRollbackSupported"> =
     Effect.fn("assertConversationRollbackSupported")(function* (threadId) {

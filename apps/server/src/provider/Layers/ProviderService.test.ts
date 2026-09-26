@@ -421,6 +421,7 @@ function makeProviderServiceLayer(
     readonly supportsConversationRollback?: boolean;
     readonly analyticsLayer?: Layer.Layer<AnalyticsService.AnalyticsService>;
     readonly registry?: ProviderAdapterRegistry.ProviderAdapterRegistry["Service"];
+    readonly settingsLayer?: ReturnType<typeof ServerSettings.ServerSettingsService.layerTest>;
   } = {},
 ) {
   const codex = makeFakeCodexAdapter(CODEX_DRIVER, input.supportsConversationRollback);
@@ -452,7 +453,7 @@ function makeProviderServiceLayer(
         Layer.provide(NodeServices.layer),
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
-        Layer.provide(defaultServerSettingsLayer),
+        Layer.provide(input.settingsLayer ?? defaultServerSettingsLayer),
         Layer.provide(serverConfigTestLayer),
         Layer.provideMerge(input.analyticsLayer ?? AnalyticsService.layerTest),
         Layer.provide(
@@ -475,6 +476,97 @@ function makeProviderServiceLayer(
     cursor,
     layer,
   };
+}
+
+for (const oldAccount of [
+  "stopped",
+  "disabled",
+  "deleted",
+  "incompatible",
+  "different-driver",
+] as const) {
+  const oldId = ProviderInstanceId.make("codex-poly");
+  const newId = ProviderInstanceId.make("codex-better");
+  const sharedKey = "codex:home:/shared/session-store";
+  const target = makeFakeCodexAdapter();
+  const baseRegistry = makeStaticInstanceRegistry([[newId, target.adapter]]);
+  const registry: ProviderAdapterRegistry.ProviderAdapterRegistry["Service"] = {
+    ...baseRegistry,
+    getInstanceInfo: (id) =>
+      id === newId || (id === oldId && oldAccount === "stopped")
+        ? Effect.succeed({
+            instanceId: id,
+            driverKind: CODEX_DRIVER,
+            displayName: String(id),
+            enabled: true,
+            continuationIdentity: { driverKind: CODEX_DRIVER, continuationKey: sharedKey },
+          })
+        : Effect.fail(new ProviderUnsupportedError({ provider: id })),
+  };
+  makeProviderServiceLayer({
+    registry,
+    settingsLayer: ServerSettings.ServerSettingsService.layerTest({
+      providerInstances:
+        oldAccount === "disabled"
+          ? {
+              [oldId]: {
+                driver: CODEX_DRIVER,
+                enabled: false,
+                config: { homePath: "/shared/session-store" },
+              },
+            }
+          : {},
+    }),
+  }).layer(`account continuation: ${oldAccount}`, (it) => {
+    it.effect(
+      "preserves the cursor and working directory or rejects without mutating the binding",
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* ProviderService.ProviderService;
+          const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
+          const threadId = asThreadId(`continuation-${oldAccount}`);
+          const cursor = { threadId: "native-codex-conversation" };
+          const cwd = fixtureCwd(`continuation-${oldAccount}`);
+          yield* directory.upsert({
+            threadId,
+            provider: oldAccount === "different-driver" ? CLAUDE_AGENT_DRIVER : CODEX_DRIVER,
+            providerInstanceId: oldId,
+            ...(oldAccount === "stopped" || oldAccount === "disabled"
+              ? {}
+              : {
+                  continuationKey:
+                    oldAccount === "incompatible" ? "codex:home:/other-store" : sharedKey,
+                }),
+            status: "stopped",
+            resumeCursor: cursor,
+            runtimePayload: { cwd },
+          });
+          const before = yield* directory.getBinding(threadId);
+          const start = provider.startSession(threadId, {
+            threadId,
+            provider: CODEX_DRIVER,
+            providerInstanceId: newId,
+            runtimeMode: "full-access",
+          });
+          if (oldAccount === "incompatible" || oldAccount === "different-driver") {
+            const failure = yield* Effect.flip(start);
+            assert.instanceOf(failure, ProviderValidationError);
+            assert.include(failure.issue, "Fork into a new thread");
+            assert.deepEqual(yield* directory.getBinding(threadId), before);
+            assert.equal(target.startSession.mock.calls.length, 0);
+            return;
+          }
+          const session = yield* start;
+          assert.deepEqual(session.resumeCursor, cursor);
+          assert.equal(session.cwd, cwd);
+          assert.deepEqual(target.startSession.mock.calls[0]?.[0].resumeCursor, cursor);
+          const after = Option.getOrThrow(yield* directory.getBinding(threadId));
+          assert.equal(after.providerInstanceId, newId);
+          assert.equal(after.continuationKey, sharedKey);
+          assert.deepEqual(after.resumeCursor, cursor);
+        }),
+    );
+  });
 }
 
 for (const [enabled, completed] of [
@@ -2657,7 +2749,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
     }),
   );
 
-  it.effect("stops stale sessions in other providers after a successful replacement start", () =>
+  it.effect("rejects cross-driver replacement without stopping the original session", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;
       const threadId = asThreadId("thread-provider-replacement");
@@ -2673,25 +2765,25 @@ routing.layer("ProviderServiceLive routing", (it) => {
       routing.codex.stopSession.mockClear();
       routing.claude.stopSession.mockClear();
 
-      const claudeSession = yield* provider.startSession(threadId, {
-        provider: ProviderDriverKind.make("claudeAgent"),
-        providerInstanceId: claudeAgentInstanceId,
-        threadId,
-        cwd: fixtureCwd("project-provider-replacement"),
-        runtimeMode: "full-access",
-      });
-
+      const failure = yield* Effect.flip(
+        provider.startSession(threadId, {
+          provider: ProviderDriverKind.make("claudeAgent"),
+          providerInstanceId: claudeAgentInstanceId,
+          threadId,
+          cwd: fixtureCwd("project-provider-replacement"),
+          runtimeMode: "full-access",
+        }),
+      );
+      assert.instanceOf(failure, ProviderValidationError);
       assert.equal(codexSession.provider, "codex");
-      assert.equal(claudeSession.provider, "claudeAgent");
-      assert.deepEqual(routing.codex.stopSession.mock.calls, [[threadId]]);
+      assert.equal(routing.codex.stopSession.mock.calls.length, 0);
       assert.equal(routing.claude.stopSession.mock.calls.length, 0);
-
       const sessions = yield* provider.listSessions();
       assert.deepEqual(
         sessions
           .filter((session) => session.threadId === threadId)
           .map((session) => session.provider),
-        ["claudeAgent"],
+        ["codex"],
       );
     }),
   );
