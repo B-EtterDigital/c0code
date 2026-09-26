@@ -33,7 +33,7 @@ export function HostFolderView({
     if (pending) return;
     setPending(true);
     try {
-      const result = await revealFileInFileManager(path);
+      const result = await revealFileInFileManager(path, "folder");
       if (result._tag !== "Success" && !isAtomCommandInterrupted(result)) {
         report("Unable to reveal folder", squashAtomCommandFailure(result));
       }
