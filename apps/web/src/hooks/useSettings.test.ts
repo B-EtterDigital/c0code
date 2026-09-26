@@ -71,6 +71,28 @@ describe("client settings hydration", () => {
     expect(persistenceMocks.getClientSettings).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps sibling completion when an older hydration read arrives afterward", async () => {
+    let finishRead!: (settings: ClientSettings) => void;
+    persistenceMocks.getClientSettings.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRead = resolve;
+        }),
+    );
+    const hydration = ensureClientSettingsHydrated();
+    applySharedOnboardingCompletion({ ...DEFAULT_CLIENT_SETTINGS, onboardingCompletedAt });
+    finishRead(savedSettings);
+    await hydration;
+    expect(getClientSettings()).toEqual({ ...savedSettings, onboardingCompletedAt });
+
+    await persistClientSettingsPatch({ onboardingCompletedAt: null, wordWrap: false });
+    expect(persistenceMocks.setClientSettings).toHaveBeenLastCalledWith({
+      ...savedSettings,
+      onboardingCompletedAt,
+      wordWrap: false,
+    });
+  });
+
   it("uses defaults only after storage confirms no saved settings exist", async () => {
     const completedSettings = { ...DEFAULT_CLIENT_SETTINGS, onboardingCompletedAt };
 

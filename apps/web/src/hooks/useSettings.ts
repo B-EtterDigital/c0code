@@ -1,13 +1,7 @@
 /**
  * Environment-scoped settings hooks.
- *
- * Abstracts the split between server-authoritative settings (persisted in
- * `settings.json` on the server, fetched via `server.getConfig`) and
- * client-only settings (persisted in localStorage).
- *
- * Live server settings always require an environment id. Primary-environment
- * access is intentionally named as such so environment-sensitive consumers
- * cannot silently read the wrong server's settings.
+ * Server settings require an explicit environment; client preferences share
+ * browser storage. Primary-environment access is named explicitly.
  */
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useAtomValue } from "@effect/atom-react";
@@ -48,9 +42,10 @@ import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useTheme } from "./useTheme";
 import {
-  CLIENT_SETTINGS_STORAGE_KEY,
-  readBrowserClientSettings,
-} from "../clientPersistenceStorage";
+  preserveOnboardingCompletion,
+  persistClientSettingsWithCompletion,
+  subscribeSharedOnboardingCompletion,
+} from "../onboarding/clientSettingsCompletion";
 
 const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";
 
@@ -83,29 +78,17 @@ function getClientSettingsSnapshot(): ClientSettings {
 }
 
 function replaceClientSettingsSnapshot(settings: ClientSettings): void {
-  clientSettingsSnapshot = settings;
+  clientSettingsSnapshot = preserveOnboardingCompletion(settings, clientSettingsSnapshot);
   emitClientSettingsChange();
 }
 
 /** Sibling C0CODE panes share storage but keep separate React snapshots. */
 export function applySharedOnboardingCompletion(settings: ClientSettings | null): void {
-  if (
-    !settings?.onboardingCompletedAt ||
-    settings.onboardingCompletedAt === clientSettingsSnapshot.onboardingCompletedAt
-  )
-    return;
-  replaceClientSettingsSnapshot({
-    ...clientSettingsSnapshot,
-    onboardingCompletedAt: settings.onboardingCompletedAt,
-  });
+  const next = preserveOnboardingCompletion(clientSettingsSnapshot, settings);
+  if (next !== clientSettingsSnapshot) replaceClientSettingsSnapshot(next);
 }
 
-if (typeof window !== "undefined") {
-  window.addEventListener("storage", (event) => {
-    if (event.key === CLIENT_SETTINGS_STORAGE_KEY)
-      applySharedOnboardingCompletion(readBrowserClientSettings());
-  });
-}
+subscribeSharedOnboardingCompletion(applySharedOnboardingCompletion);
 
 function setClientSettingsHydrationStatus(nextStatus: ClientSettingsHydrationStatus): void {
   if (clientSettingsHydrationStatus === nextStatus) {
@@ -185,16 +168,6 @@ async function hydrateClientSettings(): Promise<void> {
   return clientSettingsHydrationPromise;
 }
 
-const defaultClientSettingsPersistence = (settings: ClientSettings): Promise<void> => {
-  // A late preference write from another pane must not erase completed setup.
-  const saved = readBrowserClientSettings();
-  const next =
-    settings.onboardingCompletedAt || !saved?.onboardingCompletedAt
-      ? settings
-      : { ...settings, onboardingCompletedAt: saved.onboardingCompletedAt };
-  return ensureLocalApi().persistence.setClientSettings(next);
-};
-
 function enqueueClientSettingsPersistence<A>(work: () => Promise<A>): Promise<A> {
   const result = clientSettingsPersistenceQueue.then(work);
   clientSettingsPersistenceQueue = result.then(
@@ -206,7 +179,7 @@ function enqueueClientSettingsPersistence<A>(work: () => Promise<A>): Promise<A>
 
 export function persistClientSettingsPatch(
   patch: ClientSettingsPatch,
-  persist: (settings: ClientSettings) => Promise<void> = defaultClientSettingsPersistence,
+  persist: (settings: ClientSettings) => Promise<void> = persistClientSettingsWithCompletion,
 ): Promise<void> {
   // Patches queued before hydration must publish before newer optimistic patches.
   const deferPatch =
@@ -244,7 +217,7 @@ export function persistClientSettingsPatch(
  */
 export async function persistClientSettingsUpdate(
   update: (current: ClientSettings) => ClientSettings,
-  persist: (settings: ClientSettings) => Promise<void> = defaultClientSettingsPersistence,
+  persist: (settings: ClientSettings) => Promise<void> = persistClientSettingsWithCompletion,
 ): Promise<ClientSettings> {
   return enqueueClientSettingsPersistence(async () => {
     if (clientSettingsHydrationStatus !== "ready") {

@@ -9,6 +9,7 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { useCompleteOnboarding } from "../../onboarding/firstRun";
+import { subscribeSharedOnboardingCompletion } from "../../onboarding/clientSettingsCompletion";
 import { useEnvironments, usePrimaryEnvironment } from "../../state/environments";
 import { useProjectScans } from "../../onboarding/useProjectScans";
 import { C0CodeWordmark } from "./C0CodeWordmark";
@@ -42,6 +43,13 @@ export function WelcomeWizard({
   const finishingPromiseRef = useRef<Promise<boolean> | null>(null);
   const completionErrorToastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
   const primaryEnvironment = usePrimaryEnvironment();
+  useEffect(
+    () =>
+      subscribeSharedOnboardingCompletion(() => {
+        if (!isImporting && finishingPromiseRef.current === null) onDone();
+      }),
+    [isImporting, onDone],
+  );
   useEffect(() => {
     const newComputers = environments.filter(
       (environment) => !autoSelectedComputers.current.has(environment.environmentId),

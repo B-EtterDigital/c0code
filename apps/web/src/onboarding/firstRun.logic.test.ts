@@ -279,13 +279,13 @@ describe("transitionFirstRunGateState", () => {
     );
   });
 
-  it("allows authoritative wizard evidence to replace an app decision", () => {
+  it("does not reopen setup when workspace evidence changes in an established pane", () => {
     expect(
       transitionFirstRunGateState(
         { decision: "app", stalled: false },
         { type: "evidence", decision: "wizard" },
       ),
-    ).toEqual({ decision: "wizard", stalled: false });
+    ).toEqual({ decision: "app", stalled: false });
   });
 });
 
