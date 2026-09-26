@@ -1,3 +1,4 @@
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 /**
  * C0X patch: the SMARCH controls section of the right-panel launcher. The
  * toggles are OWNED by the C0VIBE shell (per-split flags, workspace skill
@@ -57,9 +58,14 @@ export function C0xSmarchSection({ smarch }: { smarch: C0xSmarchConfig }) {
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-sm">{toggle.title}</p>
                 {toggle.blurb ? (
-                  <p className="mt-0.5 truncate text-muted-foreground text-xs" title={toggle.blurb}>
-                    {toggle.blurb}
-                  </p>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={<p className="mt-0.5 truncate text-muted-foreground text-xs" />}
+                    >
+                      {toggle.blurb}
+                    </TooltipTrigger>
+                    <TooltipPopup>{toggle.blurb}</TooltipPopup>
+                  </Tooltip>
                 ) : null}
               </div>
               <C0xSwitch

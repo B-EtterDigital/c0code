@@ -129,10 +129,12 @@ export const importRecentAgentThreads = Effect.fn("importRecentAgentThreads")(fu
     .pipe(
       Effect.mapError((cause) => new AgentSessionScanError({ operation: "read-projects", cause })),
     );
-  const threads = input.openCodeSessionId ? Stream.fromEffect(readOpenCodeSession(input.openCodeSessionId, workspaceRoot)) : scanner.recentThreads(
-    workspaceRoot,
-    completedSources.map((entry) => entry.source),
-  );
+  const threads = input.openCodeSessionId
+    ? Stream.fromEffect(readOpenCodeSession(input.openCodeSessionId, workspaceRoot))
+    : scanner.recentThreads(
+        workspaceRoot,
+        completedSources.map((entry) => entry.source),
+      );
   const importedThreadIds = new Set<ThreadId>();
   let importedCount = 0;
   let skippedCount = 0;
@@ -235,8 +237,8 @@ export const importRecentAgentThreads = Effect.fn("importRecentAgentThreads")(fu
                 thread.source === "opencode"
                   ? { schemaVersion: 1, sessionId: thread.providerSessionId }
                   : thread.source === "codex"
-                  ? { threadId: thread.providerSessionId }
-                  : { threadId, resume: thread.providerSessionId },
+                    ? { threadId: thread.providerSessionId }
+                    : { threadId, resume: thread.providerSessionId },
               runtimePayload: { cwd: workspaceRoot },
             },
             { onConflict: "ignore" },

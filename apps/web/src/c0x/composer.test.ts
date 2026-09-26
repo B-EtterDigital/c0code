@@ -3,13 +3,20 @@ import { type EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { registerC0xComposer } from "./composer";
-import { acknowledgeC0xComposerMediaSubmission, snapshotC0xComposerMediaSubmission } from './composerMediaReceipts';
+import {
+  acknowledgeC0xComposerMediaSubmission,
+  snapshotC0xComposerMediaSubmission,
+} from "./composerMediaReceipts";
 
 const target = scopeThreadRef("c0x-composer-test" as EnvironmentId, ThreadId.make("draft-a"));
 const other = scopeThreadRef("c0x-composer-test" as EnvironmentId, ThreadId.make("draft-b"));
 
-beforeEach(() => { vi.stubGlobal("window", {}); });
-afterEach(() => { vi.unstubAllGlobals(); });
+beforeEach(() => {
+  vi.stubGlobal("window", {});
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("C0X extension of the original T3 draft", () => {
   it("appends to the addressed real draft once and preserves the other draft", () => {
@@ -20,7 +27,9 @@ describe("C0X extension of the original T3 draft", () => {
     const cleanup = registerC0xComposer(target, focus);
     expect(window.__c0xComposer?.insert("@c0cap:node-1")).toBe("inserted");
     expect(window.__c0xComposer?.insert("@c0cap:node-1")).toBe("already-present");
-    expect(useComposerDraftStore.getState().getComposerDraft(target)?.prompt).toBe("Explain @c0cap:node-1 ");
+    expect(useComposerDraftStore.getState().getComposerDraft(target)?.prompt).toBe(
+      "Explain @c0cap:node-1 ",
+    );
     expect(useComposerDraftStore.getState().getComposerDraft(other)?.prompt).toBe("Keep me");
     expect(focus).toHaveBeenCalledTimes(1);
     cleanup();
@@ -32,13 +41,23 @@ describe("C0X extension of the original T3 draft", () => {
     const cleanup = registerC0xComposer(other, vi.fn());
     oldCleanup();
     expect(window.__c0xComposer?.insert("")).toBe("empty");
-    expect(Object.keys(window.__c0xComposer ?? {}).sort()).toEqual(["attach", "focus", "insert", "targetKey"]);
+    expect(Object.keys(window.__c0xComposer ?? {}).sort()).toEqual([
+      "attach",
+      "focus",
+      "insert",
+      "targetKey",
+    ]);
     cleanup();
   });
 
   it("adds a preview and upload file to T3's own draft, without duplicating the image", () => {
     const cleanup = registerC0xComposer(target, vi.fn());
-    const image = { name: "c0cap.png", mimeType: "image/png", sizeBytes: 1, dataUrl: "data:image/png;base64,AA==" };
+    const image = {
+      name: "c0cap.png",
+      mimeType: "image/png",
+      sizeBytes: 1,
+      dataUrl: "data:image/png;base64,AA==",
+    };
     expect(window.__c0xComposer?.attach([image])).toEqual(["attached"]);
     expect(window.__c0xComposer?.attach([image])).toEqual(["already-present"]);
     const stored = useComposerDraftStore.getState().getComposerDraft(target)?.images ?? [];
@@ -47,18 +66,24 @@ describe("C0X extension of the original T3 draft", () => {
     cleanup();
   });
 
-  it('acknowledges only media in the frozen send, preserving later and other-thread media', () => {
-    useComposerDraftStore.getState().setPrompt(target, '');
+  it("acknowledges only media in the frozen send, preserving later and other-thread media", () => {
+    useComposerDraftStore.getState().setPrompt(target, "");
     const cleanup = registerC0xComposer(target, vi.fn());
-    window.__c0xComposer?.insert('first recorded words', 'receipt-first');
-    const receipt = snapshotC0xComposerMediaSubmission(target, 'first recorded words', []);
-    window.__c0xComposer?.insert('later recorded words', 'receipt-later');
+    window.__c0xComposer?.insert("first recorded words", "receipt-first");
+    const receipt = snapshotC0xComposerMediaSubmission(target, "first recorded words", []);
+    window.__c0xComposer?.insert("later recorded words", "receipt-later");
     const otherCleanup = registerC0xComposer(other, vi.fn());
-    window.__c0xComposer?.insert('other recorded words', 'receipt-other');
+    window.__c0xComposer?.insert("other recorded words", "receipt-other");
     acknowledgeC0xComposerMediaSubmission(receipt);
-    expect(window.__c0xShellEvents).toEqual([expect.objectContaining({ action: 'submitted', mediaIds: ['receipt-first'] })]);
-    expect(snapshotC0xComposerMediaSubmission(target, 'later recorded words', []).mediaIds).toEqual(['receipt-later']);
-    expect(snapshotC0xComposerMediaSubmission(other, 'other recorded words', []).mediaIds).toEqual(['receipt-other']);
+    expect(window.__c0xShellEvents).toEqual([
+      expect.objectContaining({ action: "submitted", mediaIds: ["receipt-first"] }),
+    ]);
+    expect(snapshotC0xComposerMediaSubmission(target, "later recorded words", []).mediaIds).toEqual(
+      ["receipt-later"],
+    );
+    expect(snapshotC0xComposerMediaSubmission(other, "other recorded words", []).mediaIds).toEqual([
+      "receipt-other",
+    ]);
     cleanup();
     otherCleanup();
   });

@@ -40,7 +40,7 @@ import {
 } from "./ComposerControl";
 import { composerFloatingLayerProps } from "./composerEventScope";
 import { useComposerMenuState } from "./useComposerMenuState";
-import { C0xEffortSlider } from '../c0x/C0xEffortSlider';
+import { C0xEffortSlider } from "../c0x/C0xEffortSlider";
 
 type ProviderOptions = ReadonlyArray<ProviderOptionSelection>;
 
@@ -271,7 +271,7 @@ export function shouldRenderTraitsControls(input: {
 }
 
 export interface TraitsMenuContentProps {
-  presentation?: 'menu' | 'effort' | 'remaining';
+  presentation?: "menu" | "effort" | "remaining";
   onOpenModelPicker?: (() => void) | undefined;
   provider: ProviderDriverKind;
   instanceId?: ProviderInstanceId;
@@ -297,7 +297,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
   modelOptions,
   allowPromptInjectedEffort = true,
   planModeEnabled,
-  presentation = 'menu',
+  presentation = "menu",
   onOpenModelPicker,
   ...persistence
 }: TraitsMenuContentProps & TraitsPersistence) {
@@ -368,31 +368,54 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
   }
 
   const effortDescriptor = selectDescriptors.find((descriptor) =>
-    ['effort', 'reasoningEffort', 'variant'].includes(descriptor.id));
-  if (presentation === 'effort') {
+    ["effort", "reasoningEffort", "variant"].includes(descriptor.id),
+  );
+  if (presentation === "effort") {
     if (!effortDescriptor) return null;
-    const value = ultrathinkPromptControlled && effortDescriptor.id === primarySelectDescriptor?.id
-      ? 'ultrathink' : String(getProviderOptionCurrentValue(effortDescriptor) ?? '');
-    const fast = descriptors.find((descriptor) => descriptor.id === 'fastMode' || descriptor.id === 'serviceTier');
-    const fastChoice = fast?.type === 'select' ? fast.options.find((option) => option.label === 'Fast') : undefined;
-    const normalChoice = fast?.type === 'select' ? fast.options.find((option) => option.isDefault || option.id === 'default') : undefined;
-    const fastEnabled = fast?.type === 'boolean' ? fast.currentValue === true : fastChoice !== undefined && getProviderOptionCurrentValue(fast ?? null) === fastChoice.id;
-    const toggleFast = fast?.type === 'boolean' ? () => updateDescriptors(replaceDescriptorCurrentValue(descriptors, fast.id, !fastEnabled))
-      : fast?.type === 'select' && fastChoice && normalChoice ? () => handleSelectChange(fast, fastEnabled ? normalChoice.id : fastChoice.id) : undefined;
-    return <C0xEffortSlider
-      modelLabel={models.find((item) => item.slug === model)?.name ?? model ?? 'Current model'}
-      onOpenModelPicker={onOpenModelPicker}
-      fastEnabled={fastEnabled}
-      onToggleFast={toggleFast}
-      onReset={() => {
-        const reset = effortDescriptor.options.find((option) => option.isDefault) ?? effortDescriptor.options[0];
-        if (reset) handleSelectChange(effortDescriptor, reset.id);
-      }}
-      options={effortDescriptor.options}
-      effort={value}
-      disabled={modelIsUnavailable || (ultrathinkInBodyText && effortDescriptor.id === primarySelectDescriptor?.id)}
-      onChange={(next) => handleSelectChange(effortDescriptor, next)}
-    />;
+    const value =
+      ultrathinkPromptControlled && effortDescriptor.id === primarySelectDescriptor?.id
+        ? "ultrathink"
+        : String(getProviderOptionCurrentValue(effortDescriptor) ?? "");
+    const fast = descriptors.find(
+      (descriptor) => descriptor.id === "fastMode" || descriptor.id === "serviceTier",
+    );
+    const fastChoice =
+      fast?.type === "select" ? fast.options.find((option) => option.label === "Fast") : undefined;
+    const normalChoice =
+      fast?.type === "select"
+        ? fast.options.find((option) => option.isDefault || option.id === "default")
+        : undefined;
+    const fastEnabled =
+      fast?.type === "boolean"
+        ? fast.currentValue === true
+        : fastChoice !== undefined && getProviderOptionCurrentValue(fast ?? null) === fastChoice.id;
+    const toggleFast =
+      fast?.type === "boolean"
+        ? () => updateDescriptors(replaceDescriptorCurrentValue(descriptors, fast.id, !fastEnabled))
+        : fast?.type === "select" && fastChoice && normalChoice
+          ? () => handleSelectChange(fast, fastEnabled ? normalChoice.id : fastChoice.id)
+          : undefined;
+    return (
+      <C0xEffortSlider
+        modelLabel={models.find((item) => item.slug === model)?.name ?? model ?? "Current model"}
+        onOpenModelPicker={onOpenModelPicker}
+        fastEnabled={fastEnabled}
+        onToggleFast={toggleFast}
+        onReset={() => {
+          const reset =
+            effortDescriptor.options.find((option) => option.isDefault) ??
+            effortDescriptor.options[0];
+          if (reset) handleSelectChange(effortDescriptor, reset.id);
+        }}
+        options={effortDescriptor.options}
+        effort={value}
+        disabled={
+          modelIsUnavailable ||
+          (ultrathinkInBodyText && effortDescriptor.id === primarySelectDescriptor?.id)
+        }
+        onChange={(next) => handleSelectChange(effortDescriptor, next)}
+      />
+    );
   }
 
   if (modelIsUnavailable) {
@@ -419,65 +442,82 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
 
   return (
     <>
-      {presentation === 'menu' && effortDescriptor ? <div className="px-2 py-2"><C0xEffortSlider options={effortDescriptor.options} effort={ultrathinkPromptControlled ? 'ultrathink' : String(getProviderOptionCurrentValue(effortDescriptor) ?? '')} disabled={ultrathinkInBodyText} onChange={(next) => handleSelectChange(effortDescriptor, next)} /></div> : null}
-      {selectDescriptors.filter((descriptor) => descriptor.id !== effortDescriptor?.id).map((descriptor, index) => {
-        const selectedValue =
-          ultrathinkPromptControlled && descriptor.id === primarySelectDescriptor?.id
-            ? "ultrathink"
-            : (getDescriptorStringValue(descriptor) ?? "");
+      {presentation === "menu" && effortDescriptor ? (
+        <div className="px-2 py-2">
+          <C0xEffortSlider
+            options={effortDescriptor.options}
+            effort={
+              ultrathinkPromptControlled
+                ? "ultrathink"
+                : String(getProviderOptionCurrentValue(effortDescriptor) ?? "")
+            }
+            disabled={ultrathinkInBodyText}
+            onChange={(next) => handleSelectChange(effortDescriptor, next)}
+          />
+        </div>
+      ) : null}
+      {selectDescriptors
+        .filter((descriptor) => descriptor.id !== effortDescriptor?.id)
+        .map((descriptor, index) => {
+          const selectedValue =
+            ultrathinkPromptControlled && descriptor.id === primarySelectDescriptor?.id
+              ? "ultrathink"
+              : (getDescriptorStringValue(descriptor) ?? "");
 
-        return (
-          <div key={descriptor.id}>
-            {index > 0 ? <MenuDivider /> : null}
-            <MenuGroup>
-              <div className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">
-                {descriptor.label}
-              </div>
-              {ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id ? (
-                <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
-                  Your prompt contains &quot;ultrathink&quot; in the text. Remove it to change this
-                  option.
+          return (
+            <div key={descriptor.id}>
+              {index > 0 ? <MenuDivider /> : null}
+              <MenuGroup>
+                <div className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">
+                  {descriptor.label}
                 </div>
-              ) : null}
-              <MenuRadioGroup
-                value={selectedValue}
-                onValueChange={(value) => handleSelectChange(descriptor, value)}
-              >
-                {descriptor.options.map((option) => (
-                  <MenuRadioItem
-                    key={option.id}
-                    value={option.id}
-                    hideIndicator
-                    // Base UI keeps radio menus open by default. Close on pick so
-                    // the traits menu behaves like the model picker.
-                    closeOnClick
-                    disabled={ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id}
-                  >
-                    <span className="flex w-full min-w-0 flex-col">
-                      <span className="flex w-full min-w-0 items-center justify-between gap-3">
-                        <span className="min-w-0 truncate">
-                          {option.label}
-                          {option.isDefault ? (
-                            <>
-                              {" "}
-                              <DefaultBadge />
-                            </>
-                          ) : null}
+                {ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id ? (
+                  <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
+                    Your prompt contains &quot;ultrathink&quot; in the text. Remove it to change
+                    this option.
+                  </div>
+                ) : null}
+                <MenuRadioGroup
+                  value={selectedValue}
+                  onValueChange={(value) => handleSelectChange(descriptor, value)}
+                >
+                  {descriptor.options.map((option) => (
+                    <MenuRadioItem
+                      key={option.id}
+                      value={option.id}
+                      hideIndicator
+                      // Base UI keeps radio menus open by default. Close on pick so
+                      // the traits menu behaves like the model picker.
+                      closeOnClick
+                      disabled={
+                        ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id
+                      }
+                    >
+                      <span className="flex w-full min-w-0 flex-col">
+                        <span className="flex w-full min-w-0 items-center justify-between gap-3">
+                          <span className="min-w-0 truncate">
+                            {option.label}
+                            {option.isDefault ? (
+                              <>
+                                {" "}
+                                <DefaultBadge />
+                              </>
+                            ) : null}
+                          </span>
                         </span>
+                        {option.description ? (
+                          <span className="max-w-56 text-pretty text-muted-foreground/80 text-xs">
+                            {option.description}
+                          </span>
+                        ) : null}
                       </span>
-                      {option.description ? (
-                        <span className="max-w-56 text-pretty text-muted-foreground/80 text-xs">
-                          {option.description}
-                        </span>
-                      ) : null}
-                    </span>
-                  </MenuRadioItem>
-                ))}
-              </MenuRadioGroup>
-            </MenuGroup>
-          </div>
-        );
-      })}
+                    </MenuRadioItem>
+                  ))}
+                </MenuRadioGroup>
+              </MenuGroup>
+            </div>
+          );
+        })}
       {booleanDescriptors.map((descriptor, index) => {
         const selectedValue = descriptor.currentValue === true ? "on" : "off";
 
@@ -619,7 +659,9 @@ export const TraitsPicker = memo(function TraitsPicker({
 
   const { label: triggerLabel, showFastModeIcon } = buildTraitsTriggerDisplay({
     provider,
-    descriptors: descriptors.filter((descriptor) => !['effort', 'reasoningEffort', 'variant'].includes(descriptor.id)),
+    descriptors: descriptors.filter(
+      (descriptor) => !["effort", "reasoningEffort", "variant"].includes(descriptor.id),
+    ),
     primarySelectDescriptorId: primarySelectDescriptor?.id ?? null,
     ultrathinkPromptControlled,
   });
@@ -650,64 +692,76 @@ export const TraitsPicker = memo(function TraitsPicker({
         onOpenModelPicker={onOpenModelPicker}
         provider={provider}
         {...(instanceId ? { instanceId } : {})}
-        models={models} model={model} prompt={prompt} onPromptChange={onPromptChange}
-        modelOptions={modelOptions} allowPromptInjectedEffort={allowPromptInjectedEffort}
-        planModeEnabled={planModeEnabled} {...persistence}
+        models={models}
+        model={model}
+        prompt={prompt}
+        onPromptChange={onPromptChange}
+        modelOptions={modelOptions}
+        allowPromptInjectedEffort={allowPromptInjectedEffort}
+        planModeEnabled={planModeEnabled}
+        {...persistence}
       />
-    {descriptors.some((descriptor) => !['effort', 'reasoningEffort', 'variant'].includes(descriptor.id)) ? <Menu
-      open={isMenuOpen}
-      onOpenChange={(open) => {
-        setIsMenuOpen(open);
-      }}
-    >
-      <MenuTrigger
-        render={
-          <ComposerControl
-            variant={triggerVariant ?? "ghost"}
-            size={size}
-            className={cn(
-              isCodexStyle
-                ? "min-w-0 max-w-40 shrink justify-start overflow-hidden whitespace-nowrap sm:max-w-48"
-                : "shrink-0 whitespace-nowrap",
-              triggerClassName,
-            )}
-          />
-        }
-      >
-        {isCodexStyle ? (
-          // The label truncates itself; clipping the wrapper too would cut off
-          // the chevron, whose negative end margin overhangs the wrapper edge.
-          <span
-            className={cn("flex min-w-0 w-full items-center", size === "xs" ? "gap-1" : "gap-1.5")}
+      {descriptors.some(
+        (descriptor) => !["effort", "reasoningEffort", "variant"].includes(descriptor.id),
+      ) ? (
+        <Menu
+          open={isMenuOpen}
+          onOpenChange={(open) => {
+            setIsMenuOpen(open);
+          }}
+        >
+          <MenuTrigger
+            render={
+              <ComposerControl
+                variant={triggerVariant ?? "ghost"}
+                size={size}
+                className={cn(
+                  isCodexStyle
+                    ? "min-w-0 max-w-40 shrink justify-start overflow-hidden whitespace-nowrap sm:max-w-48"
+                    : "shrink-0 whitespace-nowrap",
+                  triggerClassName,
+                )}
+              />
+            }
           >
-            {fastModeIcon}
-            <span className="min-w-0 truncate">{triggerLabel}</span>
-            <ComposerControlChevron size={size} />
-          </span>
-        ) : (
-          <>
-            {fastModeIcon}
-            <span>{triggerLabel}</span>
-            <ComposerControlChevron size={size} />
-          </>
-        )}
-      </MenuTrigger>
-      <MenuPopup align="start" {...(isComposerOwned ? composerFloatingLayerProps : {})}>
-        <TraitsMenuContent
-          presentation="remaining"
-          provider={provider}
-          {...(instanceId ? { instanceId } : {})}
-          models={models}
-          model={model}
-          prompt={prompt}
-          onPromptChange={onPromptChange}
-          modelOptions={modelOptions}
-          allowPromptInjectedEffort={allowPromptInjectedEffort}
-          planModeEnabled={planModeEnabled}
-          {...persistence}
-        />
-      </MenuPopup>
-    </Menu> : null}
+            {isCodexStyle ? (
+              // The label truncates itself; clipping the wrapper too would cut off
+              // the chevron, whose negative end margin overhangs the wrapper edge.
+              <span
+                className={cn(
+                  "flex min-w-0 w-full items-center",
+                  size === "xs" ? "gap-1" : "gap-1.5",
+                )}
+              >
+                {fastModeIcon}
+                <span className="min-w-0 truncate">{triggerLabel}</span>
+                <ComposerControlChevron size={size} />
+              </span>
+            ) : (
+              <>
+                {fastModeIcon}
+                <span>{triggerLabel}</span>
+                <ComposerControlChevron size={size} />
+              </>
+            )}
+          </MenuTrigger>
+          <MenuPopup align="start" {...(isComposerOwned ? composerFloatingLayerProps : {})}>
+            <TraitsMenuContent
+              presentation="remaining"
+              provider={provider}
+              {...(instanceId ? { instanceId } : {})}
+              models={models}
+              model={model}
+              prompt={prompt}
+              onPromptChange={onPromptChange}
+              modelOptions={modelOptions}
+              allowPromptInjectedEffort={allowPromptInjectedEffort}
+              planModeEnabled={planModeEnabled}
+              {...persistence}
+            />
+          </MenuPopup>
+        </Menu>
+      ) : null}
     </div>
   );
 });

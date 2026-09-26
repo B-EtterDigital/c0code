@@ -1,3 +1,4 @@
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import {
   File,
   FileQuestion,
@@ -135,9 +136,12 @@ function CompactEntryRow({
       <span className="c0x-session-compact-icon">
         <EntryIcon icon={entry.icon} />
       </span>
-      <span className="c0x-session-compact-title" title={entry.title}>
-        {entry.title}
-      </span>
+      <Tooltip>
+        <TooltipTrigger render={<span className="c0x-session-compact-title" />}>
+          {entry.title}
+        </TooltipTrigger>
+        <TooltipPopup>{entry.title}</TooltipPopup>
+      </Tooltip>
     </ActionableEntry>
   );
 }

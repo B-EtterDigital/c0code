@@ -198,35 +198,35 @@ function emit(): void {
 async function writeState(
   update: (state: FluidQueueState) => Omit<FluidQueueState, "version" | "revision"> | null,
 ): Promise<FluidQueueState | null> {
-  return withDispatchLock('state', async () => {
-  const current = readFluidQueueState();
-  const updated = update(current);
-  if (!updated) return null;
-  const next: FluidQueueState = {
-    ...updated,
-    version: FLUID_QUEUE_VERSION,
-    revision: current.revision + 1,
-  };
-  const target = storage();
-  if (!target) {
-    reportQueueError('write-storage', new Error('Persistent queue storage is unavailable.'));
-    return null;
-  }
-  if (target) {
-    try {
-      const raw = JSON.stringify(next);
-      target.setItem(FLUID_QUEUE_STORAGE_KEY, raw);
-      cachedRaw = raw;
-      cachedState = next;
-    } catch (error) {
-      reportQueueError("write-storage", error);
+  return withDispatchLock("state", async () => {
+    const current = readFluidQueueState();
+    const updated = update(current);
+    if (!updated) return null;
+    const next: FluidQueueState = {
+      ...updated,
+      version: FLUID_QUEUE_VERSION,
+      revision: current.revision + 1,
+    };
+    const target = storage();
+    if (!target) {
+      reportQueueError("write-storage", new Error("Persistent queue storage is unavailable."));
       return null;
     }
-  }
-  memoryState = next;
-  cachedState = next;
-  emit();
-  return next;
+    if (target) {
+      try {
+        const raw = JSON.stringify(next);
+        target.setItem(FLUID_QUEUE_STORAGE_KEY, raw);
+        cachedRaw = raw;
+        cachedState = next;
+      } catch (error) {
+        reportQueueError("write-storage", error);
+        return null;
+      }
+    }
+    memoryState = next;
+    cachedState = next;
+    emit();
+    return next;
   });
 }
 
@@ -443,13 +443,17 @@ export async function restoreFluidQueueEntry(
 }
 
 export async function removeFluidQueueEntry(threadKey: string, entryId: string): Promise<boolean> {
-  const written = await writeState((state) => state.claimsByThreadKey[threadKey]?.entryId === entryId ? null : ({
-    enabled: state.enabled,
-    entries: state.entries.filter(
-      (entry) => !(entry.threadKey === threadKey && entry.id === entryId),
-    ),
-    claimsByThreadKey: state.claimsByThreadKey,
-  }));
+  const written = await writeState((state) =>
+    state.claimsByThreadKey[threadKey]?.entryId === entryId
+      ? null
+      : {
+          enabled: state.enabled,
+          entries: state.entries.filter(
+            (entry) => !(entry.threadKey === threadKey && entry.id === entryId),
+          ),
+          claimsByThreadKey: state.claimsByThreadKey,
+        },
+  );
   if (written) liveDraftsByEntryId.delete(entryId);
   return Boolean(written);
 }
@@ -462,7 +466,10 @@ function lockManager(): QueueLockManager | null {
 async function withDispatchLock<T>(threadKey: string, action: () => Promise<T>): Promise<T | null> {
   const manager = lockManager();
   if (!manager) {
-    reportQueueError("web-lock", new Error("Cross-window queue locking is unavailable. Your draft has been retained."));
+    reportQueueError(
+      "web-lock",
+      new Error("Cross-window queue locking is unavailable. Your draft has been retained."),
+    );
     return null;
   }
   try {
@@ -492,19 +499,23 @@ export async function dispatchFluidQueueEntry(input: {
         (input.entryId === undefined || candidate.id === input.entryId),
     );
     if (!entry) return "empty" as const;
-    const claimed = await writeState((current) => current.claimsByThreadKey[input.threadKey] ? null : ({
-      enabled: current.enabled,
-      entries: current.entries,
-      claimsByThreadKey: {
-        ...current.claimsByThreadKey,
-        [input.threadKey]: {
-          entryId: entry.id,
-          mode: input.mode,
-          startedAt: Date.now(),
-          sawRunning: input.mode === "steer",
-        },
-      },
-    }));
+    const claimed = await writeState((current) =>
+      current.claimsByThreadKey[input.threadKey]
+        ? null
+        : {
+            enabled: current.enabled,
+            entries: current.entries,
+            claimsByThreadKey: {
+              ...current.claimsByThreadKey,
+              [input.threadKey]: {
+                entryId: entry.id,
+                mode: input.mode,
+                startedAt: Date.now(),
+                sawRunning: input.mode === "steer",
+              },
+            },
+          },
+    );
     if (!claimed) return "refused" as const;
 
     let started = false;
@@ -532,19 +543,30 @@ export async function dispatchFluidQueueEntry(input: {
   return result ?? "busy";
 }
 
-export async function recordFluidQueueTurnRequest(threadKey: string, entryId: string, requestedAt: string): Promise<void> {
+export async function recordFluidQueueTurnRequest(
+  threadKey: string,
+  entryId: string,
+  requestedAt: string,
+): Promise<void> {
   await writeState((state) => {
     const claim = state.claimsByThreadKey[threadKey];
     if (!claim || claim.entryId !== entryId) return null;
-    return { ...state, claimsByThreadKey: { ...state.claimsByThreadKey, [threadKey]: { ...claim, requestedAt } } };
+    return {
+      ...state,
+      claimsByThreadKey: { ...state.claimsByThreadKey, [threadKey]: { ...claim, requestedAt } },
+    };
   });
 }
 
-export async function reconcileFluidQueuePhase(threadKey: string, latestTurn: OrchestrationLatestTurn | null | undefined): Promise<void> {
+export async function reconcileFluidQueuePhase(
+  threadKey: string,
+  latestTurn: OrchestrationLatestTurn | null | undefined,
+): Promise<void> {
   if (!latestTurn) return;
   await writeState((state) => {
     const claim = state.claimsByThreadKey[threadKey];
-    if (!claim?.requestedAt || Date.parse(latestTurn.requestedAt) < Date.parse(claim.requestedAt)) return null;
+    if (!claim?.requestedAt || Date.parse(latestTurn.requestedAt) < Date.parse(claim.requestedAt))
+      return null;
     const claims = { ...state.claimsByThreadKey };
     if (latestTurn.state === "running" && !claim.sawRunning) {
       claims[threadKey] = { ...claim, sawRunning: true };

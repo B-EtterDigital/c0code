@@ -144,7 +144,13 @@ function sshPreparationError(cause: unknown) {
 
 export const provisionDesktopSshEnvironment = Effect.fn(
   "web.connectionPlatform.ssh.provisionDesktop",
-)(function* (bridge: Pick<DesktopBridge, "ensureSshEnvironment" | "fetchSshEnvironmentDescriptor" | "bootstrapSshBearerSession">, target: DesktopSshEnvironmentTarget) {
+)(function* (
+  bridge: Pick<
+    DesktopBridge,
+    "ensureSshEnvironment" | "fetchSshEnvironmentDescriptor" | "bootstrapSshBearerSession"
+  >,
+  target: DesktopSshEnvironmentTarget,
+) {
   const bootstrap = yield* Effect.tryPromise({
     try: () =>
       bridge.ensureSshEnvironment(target, {

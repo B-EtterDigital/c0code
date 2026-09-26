@@ -131,7 +131,7 @@ describe("ComposerPrimaryActions", () => {
 
     expect(markup).toContain('aria-label="Stop generation"');
     expect(markup).not.toContain('aria-label="Send message"');
-    expect(markup).toContain('bg-orange-500');
+    expect(markup).toContain("bg-orange-500");
   });
 
   it("renders send alongside stop while running when Enter-to-send is unavailable", () => {

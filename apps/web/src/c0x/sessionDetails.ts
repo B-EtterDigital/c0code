@@ -325,8 +325,11 @@ function parseJsonContainer(value: unknown): unknown {
   try {
     return JSON.parse(value) as unknown;
   } catch (error) {
-    postC0xShellEvent({ type: "session-details-error", operation: "parse-tool-input",
-      message: error instanceof Error ? error.message : String(error) });
+    postC0xShellEvent({
+      type: "session-details-error",
+      operation: "parse-tool-input",
+      message: error instanceof Error ? error.message : String(error),
+    });
     return value;
   }
 }

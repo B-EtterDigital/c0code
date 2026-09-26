@@ -2385,15 +2385,24 @@ const makeWsRpcLayer = (
             { "rpc.aggregate": "workspace" },
           ),
         [WS_METHODS.agentSessionsScan]: (input) =>
-          observeRpcEffect(WS_METHODS.agentSessionsScan, input.roots === undefined ? agentSessionScanner.scan : Effect.gen(function* () {
-            const history = input.includeHistory ? (yield* agentSessionScanner.scan).candidates : [];
-            return yield* Effect.tryPromise({
-              try: () => scanProjectFolders(input, history),
-              catch: (cause) => new AgentSessionScanError({ operation: "read-projects", cause }),
-            });
-          }), {
-            "rpc.aggregate": "workspace",
-          }),
+          observeRpcEffect(
+            WS_METHODS.agentSessionsScan,
+            input.roots === undefined
+              ? agentSessionScanner.scan
+              : Effect.gen(function* () {
+                  const history = input.includeHistory
+                    ? (yield* agentSessionScanner.scan).candidates
+                    : [];
+                  return yield* Effect.tryPromise({
+                    try: () => scanProjectFolders(input, history),
+                    catch: (cause) =>
+                      new AgentSessionScanError({ operation: "read-projects", cause }),
+                  });
+                }),
+            {
+              "rpc.aggregate": "workspace",
+            },
+          ),
         [WS_METHODS.agentSessionsImport]: (input) =>
           observeRpcEffect(
             WS_METHODS.agentSessionsImport,

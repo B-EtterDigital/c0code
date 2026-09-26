@@ -4158,43 +4158,43 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         />
       ) : null}
       <div className={composerMedia.enabled ? "order-last ms-auto min-w-0 shrink-0" : "contents"}>
-      <ProviderModelPicker
-        isComposerOwned
-        compact={composerControlsCompact}
-        activeInstanceId={selectedInstanceId}
-        model={selectedModelForPickerWithCustomFallback}
-        lockedProvider={lockedProvider}
-        lockedContinuationGroupKey={lockedContinuationGroupKey}
-        instanceEntries={providerInstanceEntries}
-        keybindings={keybindings}
-        modelOptionsByInstance={modelOptionsByInstance}
-        size={composerControlsInStrip ? "xs" : "sm"}
-        triggerClassName={
-          composerControlsInStrip
-            ? "min-w-13 shrink text-xs! [&_[data-chat-provider-model-picker-label]]:max-w-32"
-            : "-ms-2.5"
-        }
-        terminalOpen={terminalOpen}
-        open={isComposerModelPickerOpen}
-        instanceIndicatorBackground={
-          composerControlsInStrip
-            ? "color-mix(in srgb, var(--chat-composer-glass-surface) var(--glass-opacity), transparent)"
-            : "var(--contrast-input)"
-        }
-        {...(composerProviderState.modelPickerIconClassName || composerControlsInStrip
-          ? {
-              activeProviderIconClassName: cn(
-                composerProviderState.modelPickerIconClassName,
-                composerControlsInStrip &&
-                  "fill-muted-foreground/70! text-muted-foreground/70! [&_path]:fill-muted-foreground/70! [&_rect]:fill-muted-foreground/70! [&_[data-opencode-hole]]:fill-transparent!",
-              ),
-            }
-          : {})}
-        onOpenChange={setIsComposerModelPickerOpen}
-        getModelDisabledReason={getModelDisabledReason}
-        onInstanceModelChange={onProviderModelSelect}
-        onOpenProviderSetup={onOpenProviderSetup}
-      />
+        <ProviderModelPicker
+          isComposerOwned
+          compact={composerControlsCompact}
+          activeInstanceId={selectedInstanceId}
+          model={selectedModelForPickerWithCustomFallback}
+          lockedProvider={lockedProvider}
+          lockedContinuationGroupKey={lockedContinuationGroupKey}
+          instanceEntries={providerInstanceEntries}
+          keybindings={keybindings}
+          modelOptionsByInstance={modelOptionsByInstance}
+          size={composerControlsInStrip ? "xs" : "sm"}
+          triggerClassName={
+            composerControlsInStrip
+              ? "min-w-13 shrink text-xs! [&_[data-chat-provider-model-picker-label]]:max-w-32"
+              : "-ms-2.5"
+          }
+          terminalOpen={terminalOpen}
+          open={isComposerModelPickerOpen}
+          instanceIndicatorBackground={
+            composerControlsInStrip
+              ? "color-mix(in srgb, var(--chat-composer-glass-surface) var(--glass-opacity), transparent)"
+              : "var(--contrast-input)"
+          }
+          {...(composerProviderState.modelPickerIconClassName || composerControlsInStrip
+            ? {
+                activeProviderIconClassName: cn(
+                  composerProviderState.modelPickerIconClassName,
+                  composerControlsInStrip &&
+                    "fill-muted-foreground/70! text-muted-foreground/70! [&_path]:fill-muted-foreground/70! [&_rect]:fill-muted-foreground/70! [&_[data-opencode-hole]]:fill-transparent!",
+                ),
+              }
+            : {})}
+          onOpenChange={setIsComposerModelPickerOpen}
+          getModelDisabledReason={getModelDisabledReason}
+          onInstanceModelChange={onProviderModelSelect}
+          onOpenProviderSetup={onOpenProviderSetup}
+        />
       </div>
 
       {composerControlsCompact ? (
@@ -4260,8 +4260,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
   const composerControls = (
     <>
-      {composerMedia.enabled ? <C0xComposerMediaControls state={composerMedia.state}
-        onAction={composerMedia.onAction} onPreferencesChange={composerMedia.onPreferencesChange} /> : null}
+      {composerMedia.enabled ? (
+        <C0xComposerMediaControls
+          state={composerMedia.state}
+          onAction={composerMedia.onAction}
+          onPreferencesChange={composerMedia.onPreferencesChange}
+        />
+      ) : null}
       {modelAndModeControls}
     </>
   );

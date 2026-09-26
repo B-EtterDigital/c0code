@@ -24,7 +24,10 @@ export function createTimelineEndFollower(options: {
     const atEnd = state && state.height - state.viewport - state.offset <= 1;
     stable = atEnd && state.height === lastHeight ? stable + 1 : 0;
     lastHeight = state?.height ?? -1;
-    if (forceJump || !atEnd) { forceJump = false; options.jump(); }
+    if (forceJump || !atEnd) {
+      forceJump = false;
+      options.jump();
+    }
     if (stable < 8) frame = options.request(tick);
   };
   const changed = () => {
@@ -34,7 +37,12 @@ export function createTimelineEndFollower(options: {
     if (frame === null) frame = options.request(tick);
   };
   return {
-    start() { following = true; forceJump = true; lastHeight = -1; changed(); },
+    start() {
+      following = true;
+      forceJump = true;
+      lastHeight = -1;
+      changed();
+    },
     changed,
     stop,
   };

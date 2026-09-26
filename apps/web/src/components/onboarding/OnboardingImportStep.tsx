@@ -1,3 +1,4 @@
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import type {
   AgentSessionProjectCandidate,
   EnvironmentId,
@@ -37,9 +38,16 @@ import { StepShell } from "./OnboardingStepShell";
 import { ImportCandidateList, type ImportCandidate } from "./OnboardingImportRows";
 import { OnboardingProjectLogos, type OnboardingProjectLogo } from "./OnboardingProjectLogoPicker";
 
-const SCAN_LIMIT_MESSAGE = "Folder scan limit reached. Choose a more specific folder to see the remaining projects.";
+const SCAN_LIMIT_MESSAGE =
+  "Folder scan limit reached. Choose a more specific folder to see the remaining projects.";
 export function ImportStep({
-  scans, roots, onRootsChange, scanDepth, onScanDepthChange, includeHistory, onIncludeHistoryChange,
+  scans,
+  roots,
+  onRootsChange,
+  scanDepth,
+  onScanDepthChange,
+  includeHistory,
+  onIncludeHistoryChange,
   isImporting,
   setIsImporting,
   onDone,
@@ -100,23 +108,26 @@ export function ImportStep({
 
   const { available: candidates } = useMemo(
     () =>
-      partitionOnboardingProjects(
-        [...scans.flatMap((scan) =>
+      partitionOnboardingProjects([
+        ...scans.flatMap((scan) =>
           (scan.data?.candidates ?? []).map((candidate) => ({
             ...candidate,
             environmentId: scan.environmentId,
             key: onboardingProjectKey(scan.environmentId, candidate.path),
           })),
-        ), ...addedFolders.filter((folder) => !scans.some((scan) =>
-          scan.environmentId === folder.environmentId && scan.data?.candidates.some((candidate) => candidate.path === folder.path),
-        ))],
-      ),
+        ),
+        ...addedFolders.filter(
+          (folder) =>
+            !scans.some(
+              (scan) =>
+                scan.environmentId === folder.environmentId &&
+                scan.data?.candidates.some((candidate) => candidate.path === folder.path),
+            ),
+        ),
+      ]),
     [scans, addedFolders],
   );
-  const selectedKeys = useMemo(
-    () => selectedPaths ?? new Set<string>(),
-    [selectedPaths],
-  );
+  const selectedKeys = useMemo(() => selectedPaths ?? new Set<string>(), [selectedPaths]);
   const selected = candidates.filter((candidate) => selectedKeys.has(candidate.key));
 
   const finishAfterImport = () => {
@@ -209,8 +220,13 @@ export function ImportStep({
         const result = await updateProject({ environmentId, input: { projectId, ...logo } });
         if (result._tag !== "Success") {
           if (!isAtomCommandInterrupted(result)) {
-            console.error("[c0x-t3-error] onboarding.saveProjectLogo", String(squashAtomCommandFailure(result)));
-            setImportError(`Could not save the logo for ${candidate.title}. Retry to finish this project.`);
+            console.error(
+              "[c0x-t3-error] onboarding.saveProjectLogo",
+              String(squashAtomCommandFailure(result)),
+            );
+            setImportError(
+              `Could not save the logo for ${candidate.title}. Retry to finish this project.`,
+            );
           }
           continue;
         }
@@ -279,12 +295,28 @@ export function ImportStep({
       description="Choose your development folder first. We’ll suggest projects inside it; nothing is selected until you choose."
     >
       <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-        <label className="flex items-center gap-2">Look inside
-          <select aria-label="Project search depth" className="rounded-md border border-border bg-background px-2 py-1" value={scanDepth} disabled={isImporting} onChange={(event) => onScanDepthChange(Number(event.target.value) as 1 | 2 | 3)}>
-            <option value={1}>Direct subfolders</option><option value={2}>Two folder levels</option><option value={3}>Three folder levels</option>
+        <label className="flex items-center gap-2">
+          Look inside
+          <select
+            aria-label="Project search depth"
+            className="rounded-md border border-border bg-background px-2 py-1"
+            value={scanDepth}
+            disabled={isImporting}
+            onChange={(event) => onScanDepthChange(Number(event.target.value) as 1 | 2 | 3)}
+          >
+            <option value={1}>Direct subfolders</option>
+            <option value={2}>Two folder levels</option>
+            <option value={3}>Three folder levels</option>
           </select>
         </label>
-        <label className="flex items-center gap-2"><Checkbox checked={includeHistory} disabled={isImporting} onCheckedChange={(checked) => onIncludeHistoryChange(checked === true)} />Include existing conversations</label>
+        <label className="flex items-center gap-2">
+          <Checkbox
+            checked={includeHistory}
+            disabled={isImporting}
+            onCheckedChange={(checked) => onIncludeHistoryChange(checked === true)}
+          />
+          Include existing conversations
+        </label>
       </div>
       {candidates.length > 0 ? (
         <div className="mt-5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -332,20 +364,72 @@ export function ImportStep({
                 {scans.length > 1 ? (
                   <legend className="mb-2 text-sm font-medium">{label}</legend>
                 ) : null}
-                <ProjectFolderBrowser environmentId={scan.environmentId} disabled={isImporting || (roots[scan.environmentId]?.length ?? 0) >= 8} label="Choose development folder" confirmLabel="Find projects in this folder" onSelect={(path) => {
-                  const current = roots[scan.environmentId] ?? [];
-                  if (!current.includes(path)) onRootsChange({ ...roots, [scan.environmentId]: [...current, path] });
-                }} />
-                {(roots[scan.environmentId] ?? []).map((root) => <div key={root} className="flex items-center justify-between gap-2 text-xs text-muted-foreground"><span className="truncate" title={root}>{root}</span><Button size="xs" variant="ghost" disabled={isImporting} onClick={() => onRootsChange({ ...roots, [scan.environmentId]: roots[scan.environmentId]!.filter((value) => value !== root) })}>Remove</Button></div>)}
-                <ProjectFolderBrowser environmentId={scan.environmentId} disabled={isImporting} onSelect={(path) => {
-                  const key = onboardingProjectKey(scan.environmentId, path);
-                  setAddedFolders((current) => current.some((folder) => folder.key === key) ? current : [...current, {
-                    key, environmentId: scan.environmentId, path,
-                    title: path.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) || path,
-                    sources: [], threadCount: 0, lastActiveAt: null, alreadyImported: false,
-                  }]);
-                  setSelectedPaths(new Set([...selectedKeys, key]));
-                }} />
+                <ProjectFolderBrowser
+                  environmentId={scan.environmentId}
+                  disabled={isImporting || (roots[scan.environmentId]?.length ?? 0) >= 8}
+                  label="Choose development folder"
+                  confirmLabel="Find projects in this folder"
+                  onSelect={(path) => {
+                    const current = roots[scan.environmentId] ?? [];
+                    if (!current.includes(path))
+                      onRootsChange({ ...roots, [scan.environmentId]: [...current, path] });
+                  }}
+                />
+                {(roots[scan.environmentId] ?? []).map((root) => (
+                  <div
+                    key={root}
+                    className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                  >
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="truncate" />}>{root}</TooltipTrigger>
+                      <TooltipPopup>{root}</TooltipPopup>
+                    </Tooltip>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      disabled={isImporting}
+                      onClick={() =>
+                        onRootsChange({
+                          ...roots,
+                          [scan.environmentId]: roots[scan.environmentId]!.filter(
+                            (value) => value !== root,
+                          ),
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <ProjectFolderBrowser
+                  environmentId={scan.environmentId}
+                  disabled={isImporting}
+                  onSelect={(path) => {
+                    const key = onboardingProjectKey(scan.environmentId, path);
+                    setAddedFolders((current) =>
+                      current.some((folder) => folder.key === key)
+                        ? current
+                        : [
+                            ...current,
+                            {
+                              key,
+                              environmentId: scan.environmentId,
+                              path,
+                              title:
+                                path
+                                  .replace(/[\\/]+$/, "")
+                                  .split(/[\\/]/)
+                                  .at(-1) || path,
+                              sources: [],
+                              threadCount: 0,
+                              lastActiveAt: null,
+                              alreadyImported: false,
+                            },
+                          ],
+                    );
+                    setSelectedPaths(new Set([...selectedKeys, key]));
+                  }}
+                />
                 {scan.isPending && scan.data === null ? (
                   <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
                     <Spinner className="size-4" />
@@ -363,7 +447,8 @@ export function ImportStep({
                   </div>
                 ) : scanCandidates.length === 0 ? (
                   <p className="py-2 text-sm text-muted-foreground">
-                    Choose a development folder to find projects, or browse to add one project directly.
+                    Choose a development folder to find projects, or browse to add one project
+                    directly.
                   </p>
                 ) : null}
                 {scan.data?.truncated ? (
@@ -371,12 +456,17 @@ export function ImportStep({
                     {SCAN_LIMIT_MESSAGE}
                   </p>
                 ) : null}
-                <OnboardingProjectLogos.Provider value={{ logos, setLogo: (key, logo) => setLogos((current) => ({ ...current, [key]: logo })) }}>
-                <ImportCandidateList
-                  candidates={scanCandidates}
-                  selectedKeys={selectedKeys}
-                  onSelectionChange={setSelectedPaths}
-                />
+                <OnboardingProjectLogos.Provider
+                  value={{
+                    logos,
+                    setLogo: (key, logo) => setLogos((current) => ({ ...current, [key]: logo })),
+                  }}
+                >
+                  <ImportCandidateList
+                    candidates={scanCandidates}
+                    selectedKeys={selectedKeys}
+                    onSelectionChange={setSelectedPaths}
+                  />
                 </OnboardingProjectLogos.Provider>
               </fieldset>
             );
@@ -392,15 +482,12 @@ export function ImportStep({
         >
           {importError ? "Continue without the rest" : "Do not import projects"}
         </Button>
-        <Button
-          autoFocus
-          disabled={isImporting}
-          onClick={() => void runImport(selected)}
-        >
+        <Button autoFocus disabled={isImporting} onClick={() => void runImport(selected)}>
           {isImporting
             ? "Importing…"
-            : selected.length === 0 ? "Continue without importing"
-            : `Import ${selected.length} ${selected.length === 1 ? "project" : "projects"}`}
+            : selected.length === 0
+              ? "Continue without importing"
+              : `Import ${selected.length} ${selected.length === 1 ? "project" : "projects"}`}
         </Button>
       </div>
     </StepShell>

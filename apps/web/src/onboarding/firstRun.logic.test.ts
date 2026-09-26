@@ -29,8 +29,13 @@ describe("finishing onboarding", () => {
     expect(transitionFirstRunGateState(wizard, { type: "evidence", decision: "app" })).toBe(wizard);
     const completed = transitionFirstRunGateState(wizard, { type: "completed" });
     expect(completed).toEqual({ decision: "app", stalled: false });
-    expect(transitionFirstRunGateState(completed, { type: "evidence", decision: "pending" })).toBe(completed);
-    expect(resolveFirstRunDecision({ ...freshWorkspace, completed: true })).toEqual({ decision: "app", persistCompletion: false });
+    expect(transitionFirstRunGateState(completed, { type: "evidence", decision: "pending" })).toBe(
+      completed,
+    );
+    expect(resolveFirstRunDecision({ ...freshWorkspace, completed: true })).toEqual({
+      decision: "app",
+      persistCompletion: false,
+    });
   });
 });
 

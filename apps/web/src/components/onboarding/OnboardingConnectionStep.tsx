@@ -155,15 +155,22 @@ export function ConnectionStep({
           </CollapsibleTrigger>
           <CollapsiblePanel>
             <div className="px-3 pb-3">
-              <GuidedComputerConnection pairing={<PairingForm
-                isPairing={isPairing}
-                setIsPairing={setIsPairing}
-                onPaired={(environmentId) => {
-                  setPairingOpen(false);
-                  onPaired(environmentId);
-                  requestAnimationFrame(() => continueRef.current?.focus());
-                }}
-              />} disabled={isPairing} onBusyChange={setIsPairing} onConnected={onPaired} />
+              <GuidedComputerConnection
+                pairing={
+                  <PairingForm
+                    isPairing={isPairing}
+                    setIsPairing={setIsPairing}
+                    onPaired={(environmentId) => {
+                      setPairingOpen(false);
+                      onPaired(environmentId);
+                      requestAnimationFrame(() => continueRef.current?.focus());
+                    }}
+                  />
+                }
+                disabled={isPairing}
+                onBusyChange={setIsPairing}
+                onConnected={onPaired}
+              />
             </div>
           </CollapsiblePanel>
         </Collapsible>
@@ -372,7 +379,9 @@ function PairingForm({
           </div>
           <CollapsiblePanel className="pt-3">
             <p className="text-sm text-muted-foreground">
-              On the other computer, open C0CODE → Settings → Connections and create a pairing link. Paste it above. Both computers must be able to reach each other over your network or VPN.
+              On the other computer, open C0CODE → Settings → Connections and create a pairing link.
+              Paste it above. Both computers must be able to reach each other over your network or
+              VPN.
             </p>
           </CollapsiblePanel>
         </Collapsible>
@@ -382,4 +391,3 @@ function PairingForm({
 }
 
 // ── Step 3: agents ───────────────────────────────────────────
-

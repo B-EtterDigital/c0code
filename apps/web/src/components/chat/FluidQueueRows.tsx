@@ -94,7 +94,8 @@ export function FluidQueueRows(props: FluidQueueRowsProps) {
 
   const openInSideChat = async (entry: FluidQueueEntry) => {
     try {
-      if (await props.onOpenInSideChat(entry)) await removeFluidQueueEntry(props.threadKey, entry.id);
+      if (await props.onOpenInSideChat(entry))
+        await removeFluidQueueEntry(props.threadKey, entry.id);
     } catch (error) {
       reportActionError("open-side-chat", error);
     }

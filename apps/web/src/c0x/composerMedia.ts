@@ -41,28 +41,59 @@ const EMPTY_STATE: C0xComposerMediaState = {
 export function useC0xComposerMedia(targetKey: string) {
   const shell = useC0xShellConfig();
   const enabled = shell.modules.length > 0;
-  const [snapshot, setSnapshot] = useState<{ targetKey: string; state: C0xComposerMediaState } | null>(null);
-  const request = useCallback((action: C0xComposerMediaRequest["action"], preferences?: Partial<C0xMediaPreferences>) => {
-    if (!enabled) return;
-    postC0xShellEvent({ type: "composer-media", action, targetKey, requestId: randomUUID(),
-      ...(preferences ? { preferences } : {}),
-    });
-  }, [enabled, targetKey]);
+  const [snapshot, setSnapshot] = useState<{
+    targetKey: string;
+    state: C0xComposerMediaState;
+  } | null>(null);
+  const request = useCallback(
+    (action: C0xComposerMediaRequest["action"], preferences?: Partial<C0xMediaPreferences>) => {
+      if (!enabled) return;
+      postC0xShellEvent({
+        type: "composer-media",
+        action,
+        targetKey,
+        requestId: randomUUID(),
+        ...(preferences ? { preferences } : {}),
+      });
+    },
+    [enabled, targetKey],
+  );
 
   useEffect(() => {
     if (!enabled) return;
     const receive = (event: Event) => {
       const detail: unknown = event instanceof CustomEvent ? event.detail : null;
-      if (!detail || typeof detail !== "object" || !("targetKey" in detail) || detail.targetKey !== targetKey) return;
+      if (
+        !detail ||
+        typeof detail !== "object" ||
+        !("targetKey" in detail) ||
+        detail.targetKey !== targetKey
+      )
+        return;
       const state = "state" in detail ? detail.state : null;
-      if (!state || typeof state !== "object" || !("ready" in state) || typeof state.ready !== "boolean"
-        || !("preferences" in state) || !state.preferences
-        || !("waveform" in state) || !Array.isArray(state.waveform)
-        || !("pipelines" in state) || !Array.isArray(state.pipelines)
-        || !("projects" in state) || !Array.isArray(state.projects)
-        || !("dictationSessions" in state) || !Array.isArray(state.dictationSessions)
-        || !("captureSessions" in state) || !Array.isArray(state.captureSessions)) {
-        postC0xShellEvent({ type: "composer-media-error", operation: "state", message: "The host returned an invalid composer media state." });
+      if (
+        !state ||
+        typeof state !== "object" ||
+        !("ready" in state) ||
+        typeof state.ready !== "boolean" ||
+        !("preferences" in state) ||
+        !state.preferences ||
+        !("waveform" in state) ||
+        !Array.isArray(state.waveform) ||
+        !("pipelines" in state) ||
+        !Array.isArray(state.pipelines) ||
+        !("projects" in state) ||
+        !Array.isArray(state.projects) ||
+        !("dictationSessions" in state) ||
+        !Array.isArray(state.dictationSessions) ||
+        !("captureSessions" in state) ||
+        !Array.isArray(state.captureSessions)
+      ) {
+        postC0xShellEvent({
+          type: "composer-media-error",
+          operation: "state",
+          message: "The host returned an invalid composer media state.",
+        });
         return;
       }
       setSnapshot({ targetKey, state: state as C0xComposerMediaState });
@@ -76,6 +107,7 @@ export function useC0xComposerMedia(targetKey: string) {
     enabled,
     state: snapshot?.targetKey === targetKey ? snapshot.state : EMPTY_STATE,
     onAction: (action: "start" | "stop" | "capture") => request(action),
-    onPreferencesChange: (preferences: Partial<C0xMediaPreferences>) => request("preferences", preferences),
+    onPreferencesChange: (preferences: Partial<C0xMediaPreferences>) =>
+      request("preferences", preferences),
   };
 }

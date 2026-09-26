@@ -1826,10 +1826,14 @@ function ComposerPromptEditorInner({
       const domSelection = rootElement?.ownerDocument.getSelection();
       // Native caret movement can precede Lexical's selection update. Read
       // the visible selection so history navigation cannot skip a boundary.
-      const selection = rootElement && domSelection?.anchorNode && domSelection.focusNode
-        && rootElement.contains(domSelection.anchorNode) && rootElement.contains(domSelection.focusNode)
-        ? $createRangeSelectionFromDom(domSelection, editor) ?? $getSelection()
-        : $getSelection();
+      const selection =
+        rootElement &&
+        domSelection?.anchorNode &&
+        domSelection.focusNode &&
+        rootElement.contains(domSelection.anchorNode) &&
+        rootElement.contains(domSelection.focusNode)
+          ? ($createRangeSelectionFromDom(domSelection, editor) ?? $getSelection())
+          : $getSelection();
       const nextValue = $getRoot().getTextContent();
       const fallbackCursor = clampCollapsedComposerCursor(nextValue, snapshotRef.current.cursor);
       const nextCursor = clampCollapsedComposerCursor(

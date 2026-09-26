@@ -73,7 +73,10 @@ export function AgentsStep({
 }) {
   const { environments } = useEnvironments();
   return (
-    <StepShell title="Bring your own Agents (CLI)" description="Agents available on your selected computers.">
+    <StepShell
+      title="Bring your own Agents (CLI)"
+      description="Agents available on your selected computers."
+    >
       <ScrollArea
         scrollFade
         className="mt-5 h-auto max-h-96 [&_[data-slot=scroll-area-scrollbar]]:opacity-100"
@@ -90,7 +93,16 @@ export function AgentsStep({
             />
           ))}
           <h2 className="border-t border-border pt-4 text-lg font-semibold">Your Accounts</h2>
-          {environmentIds.map((environmentId) => <ComputerAccounts key={environmentId} environmentId={environmentId} machineLabel={environments.find((environment) => environment.environmentId === environmentId)?.label ?? "Computer"} />)}
+          {environmentIds.map((environmentId) => (
+            <ComputerAccounts
+              key={environmentId}
+              environmentId={environmentId}
+              machineLabel={
+                environments.find((environment) => environment.environmentId === environmentId)
+                  ?.label ?? "Computer"
+              }
+            />
+          ))}
         </div>
       </ScrollArea>
       <div className="mt-6 flex justify-end">
@@ -103,15 +115,52 @@ export function AgentsStep({
   );
 }
 
-function ComputerAccounts({ environmentId, machineLabel }: { environmentId: EnvironmentId; machineLabel: string }) {
+function ComputerAccounts({
+  environmentId,
+  machineLabel,
+}: {
+  environmentId: EnvironmentId;
+  machineLabel: string;
+}) {
   const config = useAtomValue(serverEnvironment.configValueAtom(environmentId));
-  return <OnboardingAccounts environmentId={environmentId} machineLabel={machineLabel} renderTerminal={(provider, onClose) => config ? <AgentInstallTerminal key={provider.instanceId} session={{
-    environmentId, providerInstanceId: provider.instanceId, driver: provider.driver,
-    cwd: config.cwd, keybindings: config.keybindings,
-    command: provider.driver === "opencode" ? (provider.installed ? "opencode auth login" : "npm install -g opencode-ai") : provider.installed
-      ? resolveOnboardingProviderLoginCommand(provider, config.settings, config.environment.platform.os)
-      : resolveOnboardingProviderInstallCommand(provider.driver as OnboardingAgentDriver, config.environment.platform.os),
-  }} onClose={onClose} /> : <p className="text-sm text-muted-foreground">Waiting for the computer…</p>} />;
+  return (
+    <OnboardingAccounts
+      environmentId={environmentId}
+      machineLabel={machineLabel}
+      renderTerminal={(provider, onClose) =>
+        config ? (
+          <AgentInstallTerminal
+            key={provider.instanceId}
+            session={{
+              environmentId,
+              providerInstanceId: provider.instanceId,
+              driver: provider.driver,
+              cwd: config.cwd,
+              keybindings: config.keybindings,
+              command:
+                provider.driver === "opencode"
+                  ? provider.installed
+                    ? "opencode auth login"
+                    : "npm install -g opencode-ai"
+                  : provider.installed
+                    ? resolveOnboardingProviderLoginCommand(
+                        provider,
+                        config.settings,
+                        config.environment.platform.os,
+                      )
+                    : resolveOnboardingProviderInstallCommand(
+                        provider.driver as OnboardingAgentDriver,
+                        config.environment.platform.os,
+                      ),
+            }}
+            onClose={onClose}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">Waiting for the computer…</p>
+        )
+      }
+    />
+  );
 }
 
 function ConnectedAgentsStep({
@@ -173,7 +222,26 @@ function ConnectedAgentsStep({
             }}
           />
         ))}
-        {[...byDriver.values()].filter((provider) => !PRIMARY_AGENT_DRIVERS.includes(provider.driver as OnboardingAgentDriver) && provider.installed).map((provider) => <div key={provider.instanceId} className="rounded-lg border border-border bg-background px-3 py-2 text-sm"><span className="font-medium">{getDriverOption(provider.driver)?.label || provider.driver}</span><span className="ml-2 text-xs text-muted-foreground">Installed · {provider.enabled ? getProviderSummary(provider).headline : "Not enabled"}</span></div>)}
+        {[...byDriver.values()]
+          .filter(
+            (provider) =>
+              !PRIMARY_AGENT_DRIVERS.includes(provider.driver as OnboardingAgentDriver) &&
+              provider.installed,
+          )
+          .map((provider) => (
+            <div
+              key={provider.instanceId}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            >
+              <span className="font-medium">
+                {getDriverOption(provider.driver)?.label || provider.driver}
+              </span>
+              <span className="ml-2 text-xs text-muted-foreground">
+                Installed ·{" "}
+                {provider.enabled ? getProviderSummary(provider).headline : "Not enabled"}
+              </span>
+            </div>
+          ))}
       </div>
       {terminalSession !== null ? (
         <AgentInstallTerminal
@@ -400,4 +468,3 @@ function AgentInstallTerminal({
 }
 
 // ── Step 4: import ───────────────────────────────────────────
-

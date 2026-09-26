@@ -7,12 +7,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function equalComposerSnapshots(left: unknown, right: unknown): boolean {
   if (left === right) return true;
   if (Array.isArray(left) && Array.isArray(right)) {
-    return left.length === right.length && left.every((value, index) => equalComposerSnapshots(value, right[index]));
+    return (
+      left.length === right.length &&
+      left.every((value, index) => equalComposerSnapshots(value, right[index]))
+    );
   }
   if (!isRecord(left) || !isRecord(right)) return false;
   const keys = Object.keys(left);
-  return keys.length === Object.keys(right).length && keys.every((key) =>
-    Object.hasOwn(right, key) && equalComposerSnapshots(left[key], right[key]));
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => Object.hasOwn(right, key) && equalComposerSnapshots(left[key], right[key]))
+  );
 }
 
 /** Apply this pane's changes to the latest snapshot, retaining other panes' edits. */
@@ -25,9 +30,13 @@ export function mergeComposerSnapshots(base: unknown, local: unknown, remote: un
     const result: Record<string, unknown> = {};
     for (const key of new Set([...Object.keys(local), ...Object.keys(remote)])) {
       const value = mergeComposerSnapshots(base?.[key], local[key], remote[key]);
-      if (value !== undefined) Object.defineProperty(result, key, {
-        value, enumerable: true, configurable: true, writable: true,
-      });
+      if (value !== undefined)
+        Object.defineProperty(result, key, {
+          value,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
     }
     return result;
   }
@@ -39,10 +48,11 @@ export function mergeComposerSnapshots(base: unknown, local: unknown, remote: un
 export function createComposerStorage(storage: Partial<StateStorage> | null | undefined) {
   const baseStorage = resolveStorage(storage);
   let baseline: unknown;
-  const parse = (raw: string | null) => raw === null ? undefined : JSON.parse(raw) as unknown;
+  const parse = (raw: string | null) => (raw === null ? undefined : (JSON.parse(raw) as unknown));
   const read = (name: string) => {
     const raw = baseStorage.getItem(name);
-    if (raw instanceof Promise) throw new Error("Composer persistence requires synchronous storage");
+    if (raw instanceof Promise)
+      throw new Error("Composer persistence requires synchronous storage");
     return raw;
   };
   return {
@@ -58,7 +68,8 @@ export function createComposerStorage(storage: Partial<StateStorage> | null | un
       const merged = mergeComposerSnapshots(baseline, local, remote);
       if (!equalComposerSnapshots(merged, remote)) {
         const encoded = equalComposerSnapshots(merged, local) ? raw : JSON.stringify(merged);
-        if (encoded === undefined) throw new Error("Composer persistence received an empty snapshot");
+        if (encoded === undefined)
+          throw new Error("Composer persistence received an empty snapshot");
         baseStorage.setItem(name, encoded);
       }
       // The in-memory store still represents local, not the merged disk snapshot.

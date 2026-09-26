@@ -40,9 +40,11 @@ describe("confirm dialog coordinator", () => {
     completeConfirmDialogClose();
     await expect(requestConfirmDialog("Close C0DIC?", { rememberKey })).resolves.toBe(true);
     expect(readConfirmDialogState().status).toBe("idle");
-    const terminal = requireConfirmation(requestConfirmDialog("Close terminal?", {
-      rememberKey: "test:terminal-close-confirmed",
-    }));
+    const terminal = requireConfirmation(
+      requestConfirmDialog("Close terminal?", {
+        rememberKey: "test:terminal-close-confirmed",
+      }),
+    );
     expect(readConfirmDialogState().status).toBe("confirming");
     respondToConfirmDialog(false);
     await expect(terminal).resolves.toBe(false);

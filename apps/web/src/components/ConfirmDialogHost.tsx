@@ -61,7 +61,9 @@ export function ConfirmDialogHost() {
 
   useEffect(() => registerConfirmDialogHost(), []);
   const [remember, setRemember] = useState(false);
-  useEffect(() => { setRemember(false); }, [state]);
+  useEffect(() => {
+    setRemember(false);
+  }, [state]);
 
   const copy = resolveConfirmDialogCopy(state.status === "idle" ? "" : state.message);
   const confirmVariant = state.status === "idle" ? "default" : state.variant;

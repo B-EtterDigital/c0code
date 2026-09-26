@@ -721,11 +721,14 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
     const measure = () => {
       const viewportWidth = timelineViewportElement.getBoundingClientRect().width;
-      const nextHasPersistentGutter = c0xNavigation || resolveTimelineMinimapHasPersistentGutter(viewportWidth);
+      const nextHasPersistentGutter =
+        c0xNavigation || resolveTimelineMinimapHasPersistentGutter(viewportWidth);
       setMinimapHasPersistentGutter((current) =>
         current === nextHasPersistentGutter ? current : nextHasPersistentGutter,
       );
-      setMinimapHitStripWidth(Math.max(c0xNavigation ? 24 : 0, resolveTimelineMinimapHitStripWidth(viewportWidth)));
+      setMinimapHitStripWidth(
+        Math.max(c0xNavigation ? 24 : 0, resolveTimelineMinimapHitStripWidth(viewportWidth)),
+      );
       reportContentOverflow();
     };
 
@@ -1217,11 +1220,20 @@ function TimelineMinimap({
               if (nextItem) onSelect(nextItem);
             }}
           />
-          {onJumpToEnd ? <Button type="button" size="icon-micro" variant="ghost-muted"
-            aria-label="Jump to latest message" title="Jump to latest message"
-            data-testid="timeline-jump-to-latest"
-            className="pointer-events-auto absolute left-1 top-[calc(100%+24px)] -translate-x-1/2"
-            onClick={onJumpToEnd}><ChevronsDownIcon className="size-4" /></Button> : null}
+          {onJumpToEnd ? (
+            <Button
+              type="button"
+              size="icon-micro"
+              variant="ghost-muted"
+              aria-label="Jump to latest message"
+              title="Jump to latest message"
+              data-testid="timeline-jump-to-latest"
+              className="pointer-events-auto absolute left-1 top-[calc(100%+24px)] -translate-x-1/2"
+              onClick={onJumpToEnd}
+            >
+              <ChevronsDownIcon className="size-4" />
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>

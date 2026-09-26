@@ -3,7 +3,8 @@ import { createMemoryStorage } from "../lib/storage";
 import { createComposerStorage, mergeComposerSnapshots } from "./composerStorage";
 
 const key = "drafts";
-const snapshot = (drafts: Record<string, unknown>) => JSON.stringify({ state: { drafts }, version: 9 });
+const snapshot = (drafts: Record<string, unknown>) =>
+  JSON.stringify({ state: { drafts }, version: 9 });
 
 describe("composer persistence shared by multiple panes", () => {
   it("retains another pane's draft when a stale pane flushes at unload", () => {
@@ -18,7 +19,9 @@ describe("composer persistence shared by multiple panes", () => {
     visible.setItem(key, filled);
     sidebar.setItem(key, snapshot({ a: { prompt: "", attachments: [], mode: "full" } }));
     expect(JSON.parse(disk.getItem(key) as string).state.drafts.a).toEqual({
-      prompt: "unsent", attachments: [{ id: "image" }], mode: "full",
+      prompt: "unsent",
+      attachments: [{ id: "image" }],
+      mode: "full",
     });
     // Repeated writes must not delete remote fields absent from local memory.
     visible.setItem(key, filled);
@@ -26,9 +29,13 @@ describe("composer persistence shared by multiple panes", () => {
   });
 
   it("preserves edits to different drafts and applies observed deletion", () => {
-    expect(mergeComposerSnapshots(
-      { a: "old", b: "old" }, { a: "mine", b: "old" }, { a: "old", b: "theirs" },
-    )).toEqual({ a: "mine", b: "theirs" });
+    expect(
+      mergeComposerSnapshots(
+        { a: "old", b: "old" },
+        { a: "mine", b: "old" },
+        { a: "old", b: "theirs" },
+      ),
+    ).toEqual({ a: "mine", b: "theirs" });
     expect(mergeComposerSnapshots({ a: "old" }, {}, { a: "old" })).toEqual({});
     expect(mergeComposerSnapshots({ a: "old" }, {}, { a: "new" })).toEqual({ a: "new" });
   });
@@ -42,7 +49,10 @@ describe("composer persistence shared by multiple panes", () => {
     disk.setItem(key, remote);
     const merged = pane.receive(JSON.parse(snapshot({ a: "typing", b: "old" })), remote);
     pane.setItem(key, JSON.stringify(merged));
-    expect(JSON.parse(disk.getItem(key) as string).state.drafts).toEqual({ a: "typing", b: "remote" });
+    expect(JSON.parse(disk.getItem(key) as string).state.drafts).toEqual({
+      a: "typing",
+      b: "remote",
+    });
   });
 
   it("fails loudly without replacing corrupt saved data", () => {

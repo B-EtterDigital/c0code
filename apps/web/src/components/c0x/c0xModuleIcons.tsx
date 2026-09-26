@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 const C0X_MODULE_ICONS: Record<string, LucideIcon> = {
-  'file-text': FileText,
+  "file-text": FileText,
   boxes: Boxes,
   camera: Camera,
   globe: Globe,

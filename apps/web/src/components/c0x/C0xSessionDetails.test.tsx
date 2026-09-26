@@ -1,7 +1,24 @@
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { MessageId, ThreadId } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+vi.mock("../ui/tooltip", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../ui/tooltip")>();
+  const { cloneElement } = await import("react");
+  return {
+    ...actual,
+    Tooltip: ({ children }: { children: ReactNode }) => children,
+    TooltipTrigger: ({
+      children,
+      render,
+    }: {
+      children: ReactNode;
+      render?: import("react").ReactElement;
+    }) => cloneElement(render ?? <span />, {}, children),
+    TooltipPopup: () => null,
+  };
+});
 
 import type { C0xSessionDetailsThread } from "~/c0x/sessionDetails";
 import type { ChatAttachment, ChatMessage } from "~/types";

@@ -156,36 +156,41 @@ export function makeC0VibeModuleScopeClient(
     config: C0VibeModuleScopeConfig,
     operation: "issue" | "revoke",
     body: unknown,
-  ) => Effect.gen(function* () {
-    const encodedBody = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body).pipe(
-      Effect.mapError(() => new ModuleScopeRequestFailure("malformed")),
-    );
-    return yield* Effect.tryPromise({
-      try: async () => {
-        const response = await fetchRequest(operationUrl(config, operation), {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${config.token}`,
-            "Content-Type": "application/json",
-          },
-          body: encodedBody,
-          signal: AbortSignal.timeout(timeoutMs),
-        });
-        if (response.status === 401) throw new ModuleScopeRequestFailure("unauthorized");
-        if (response.status !== 200) {
-          throw new ModuleScopeRequestFailure(response.status >= 500 ? "unreachable" : "malformed");
-        }
-        try {
-          return (await response.json()) as unknown;
-        } catch (error) {
-          await Effect.runPromise(Effect.logWarning("[c0x-t3-error] moduleScope.invalidResponse", String(error)));
-          throw new ModuleScopeRequestFailure("malformed");
-        }
-      },
-      catch: (cause) =>
-        cause instanceof ModuleScopeRequestFailure ? cause : transportFailure(cause),
+  ) =>
+    Effect.gen(function* () {
+      const encodedBody = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        body,
+      ).pipe(Effect.mapError(() => new ModuleScopeRequestFailure("malformed")));
+      return yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetchRequest(operationUrl(config, operation), {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${config.token}`,
+              "Content-Type": "application/json",
+            },
+            body: encodedBody,
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          if (response.status === 401) throw new ModuleScopeRequestFailure("unauthorized");
+          if (response.status !== 200) {
+            throw new ModuleScopeRequestFailure(
+              response.status >= 500 ? "unreachable" : "malformed",
+            );
+          }
+          try {
+            return (await response.json()) as unknown;
+          } catch (error) {
+            await Effect.runPromise(
+              Effect.logWarning("[c0x-t3-error] moduleScope.invalidResponse", String(error)),
+            );
+            throw new ModuleScopeRequestFailure("malformed");
+          }
+        },
+        catch: (cause) =>
+          cause instanceof ModuleScopeRequestFailure ? cause : transportFailure(cause),
+      });
     });
-  });
 
   const issue: C0VibeModuleScopeClientShape["issue"] = Effect.fn("C0VibeModuleScopeClient.issue")(
     function* (input) {

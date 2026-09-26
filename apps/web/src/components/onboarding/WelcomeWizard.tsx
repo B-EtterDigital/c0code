@@ -63,7 +63,12 @@ export function WelcomeWizard({
   const [roots, setRoots] = useState<Readonly<Record<string, readonly string[]>>>({});
   const [scanDepth, setScanDepth] = useState<1 | 2 | 3>(2);
   const [includeHistory, setIncludeHistory] = useState(false);
-  const scans = useProjectScans(step === "import" ? setupIds : NO_ENVIRONMENTS, roots, scanDepth, includeHistory);
+  const scans = useProjectScans(
+    step === "import" ? setupIds : NO_ENVIRONMENTS,
+    roots,
+    scanDepth,
+    includeHistory,
+  );
   const isLoadingProjects =
     step === "import" &&
     scans.every((scan) => scan.data === null) &&
@@ -170,9 +175,12 @@ export function WelcomeWizard({
             ) : (
               <ImportStep
                 scans={scans}
-                roots={roots} onRootsChange={setRoots}
-                scanDepth={scanDepth} onScanDepthChange={setScanDepth}
-                includeHistory={includeHistory} onIncludeHistoryChange={setIncludeHistory}
+                roots={roots}
+                onRootsChange={setRoots}
+                scanDepth={scanDepth}
+                onScanDepthChange={setScanDepth}
+                includeHistory={includeHistory}
+                onIncludeHistoryChange={setIncludeHistory}
                 isImporting={isImporting}
                 setIsImporting={setIsImporting}
                 onDone={finish}
@@ -186,4 +194,3 @@ export function WelcomeWizard({
 }
 
 // ── Step 1: connection choice ────────────────────────────────
-

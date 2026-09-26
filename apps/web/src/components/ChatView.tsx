@@ -4791,7 +4791,9 @@ export default function ChatView(props: ChatViewProps) {
   const anchorUserScrollGenerationRef = useRef(0);
   const liveFollowUserScrollGenerationRef = useRef<number | null>(0);
   const endFollower = useTimelineEndFollower(legendListRef, activeThread?.id);
-  useEffect(() => { endFollower.changed(); }, [timelineEntries, endFollower.changed]);
+  useEffect(() => {
+    endFollower.changed();
+  }, [timelineEntries, endFollower.changed]);
   // Manual navigation stops live-follow without removing anchored end space.
   // Collapsing that space during a gesture clamps the viewport back to the end.
   const cancelTimelineLiveFollowForUserNavigation = useCallback(() => {
@@ -4874,20 +4876,23 @@ export default function ChatView(props: ChatViewProps) {
   }, []);
   // Live-follow stays active after send/thread-open until an actual list scroll
   // gesture opts out.
-  const scrollToEnd = useCallback((_animated = false) => {
-    isAtEndRef.current = true;
-    timelineScrollModeRef.current = "following-end";
-    liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-    setTimelineLiveFollowEnabled(true);
-    pendingTimelineAnchorRef.current = null;
-    positionedTimelineAnchorRef.current = null;
-    settledTimelineAnchorRef.current = null;
-    activeTimelineAnchorIndexRef.current = null;
-    showScrollDebouncer.current.cancel();
-    setShowScrollToBottom(false);
-    setTimelineAnchor(releaseChatTimelineAnchor);
-    endFollower.start();
-  }, [endFollower.start]);
+  const scrollToEnd = useCallback(
+    (_animated = false) => {
+      isAtEndRef.current = true;
+      timelineScrollModeRef.current = "following-end";
+      liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
+      setTimelineLiveFollowEnabled(true);
+      pendingTimelineAnchorRef.current = null;
+      positionedTimelineAnchorRef.current = null;
+      settledTimelineAnchorRef.current = null;
+      activeTimelineAnchorIndexRef.current = null;
+      showScrollDebouncer.current.cancel();
+      setShowScrollToBottom(false);
+      setTimelineAnchor(releaseChatTimelineAnchor);
+      endFollower.start();
+    },
+    [endFollower.start],
+  );
   useLayoutEffect(() => {
     if (timelineScrollModeRef.current !== "anchoring-new-turn") {
       return;
@@ -8680,7 +8685,10 @@ export default function ChatView(props: ChatViewProps) {
                 onContentOverflowChange={setTimelineOverflows}
                 onToolOutputCollapsedAtEnd={onToolOutputCollapsedAtEnd}
                 onManualNavigation={cancelTimelineLiveFollowForUserNavigation}
-                onJumpToEnd={() => { composerRef.current?.restoreAfterTimelineReachedEnd(); scrollToEnd(); }}
+                onJumpToEnd={() => {
+                  composerRef.current?.restoreAfterTimelineReachedEnd();
+                  scrollToEnd();
+                }}
                 hideEmptyPlaceholder={isDraftHeroState || threadDetailLoading}
                 topFadeEnabled={!hasTimelineTopBanner}
                 loadEarlier={loadEarlierTurns}

@@ -73,7 +73,15 @@ export function ImportCandidateList({
           onToggle={setKeys}
         />
       ))}
-      {other.map((candidate) => <ImportCandidateRow key={candidate.key} candidate={candidate} label={candidate.title} checked={selectedKeys.has(candidate.key)} onCheckedChange={(checked) => setKeys([candidate.key], checked)} />)}
+      {other.map((candidate) => (
+        <ImportCandidateRow
+          key={candidate.key}
+          candidate={candidate}
+          label={candidate.title}
+          checked={selectedKeys.has(candidate.key)}
+          onCheckedChange={(checked) => setKeys([candidate.key], checked)}
+        />
+      ))}
     </>
   );
 }
@@ -153,35 +161,35 @@ function ImportCandidateRow({
 }) {
   return (
     <div>
-    <label
-      className={cn(
-        "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40 has-disabled:cursor-default",
-        nested && "pl-8",
-      )}
-    >
-      <Checkbox checked={checked} onCheckedChange={(value) => onCheckedChange(value === true)} />
-      <Tooltip>
-        <TooltipTrigger
-          render={<span className="flex min-w-0 flex-1 items-baseline gap-2 truncate" />}
-        >
-          <span className={cn("truncate", nested ? "font-mono text-xs" : "text-sm font-medium")}>
-            {label}
-          </span>
-          {secondary !== undefined ? (
-            <span className="truncate font-mono text-[11px] text-muted-foreground">
-              {secondary}
+      <label
+        className={cn(
+          "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40 has-disabled:cursor-default",
+          nested && "pl-8",
+        )}
+      >
+        <Checkbox checked={checked} onCheckedChange={(value) => onCheckedChange(value === true)} />
+        <Tooltip>
+          <TooltipTrigger
+            render={<span className="flex min-w-0 flex-1 items-baseline gap-2 truncate" />}
+          >
+            <span className={cn("truncate", nested ? "font-mono text-xs" : "text-sm font-medium")}>
+              {label}
             </span>
-          ) : null}
-        </TooltipTrigger>
-        <TooltipPopup className="max-w-96 break-all font-mono">{candidate.path}</TooltipPopup>
-      </Tooltip>
-      <ImportRowMeta
-        sources={nested ? null : candidate.sources}
-        threadCount={candidate.threadCount}
-        lastActiveAt={candidate.lastActiveAt}
-      />
-    </label>
-    {checked ? <OnboardingProjectLogoPicker candidate={candidate} /> : null}
+            {secondary !== undefined ? (
+              <span className="truncate font-mono text-[11px] text-muted-foreground">
+                {secondary}
+              </span>
+            ) : null}
+          </TooltipTrigger>
+          <TooltipPopup className="max-w-96 break-all font-mono">{candidate.path}</TooltipPopup>
+        </Tooltip>
+        <ImportRowMeta
+          sources={nested ? null : candidate.sources}
+          threadCount={candidate.threadCount}
+          lastActiveAt={candidate.lastActiveAt}
+        />
+      </label>
+      {checked ? <OnboardingProjectLogoPicker candidate={candidate} /> : null}
     </div>
   );
 }

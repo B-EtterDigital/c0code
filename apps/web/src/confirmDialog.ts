@@ -104,8 +104,12 @@ export function requestConfirmDialog(
     }
 
     activeConfirmation = pending;
-    publish({ status: "confirming", message, variant: pending.variant,
-      ...(pending.rememberKey ? { rememberKey: pending.rememberKey } : {}) });
+    publish({
+      status: "confirming",
+      message,
+      variant: pending.variant,
+      ...(pending.rememberKey ? { rememberKey: pending.rememberKey } : {}),
+    });
   });
 
   return confirmation;
@@ -133,8 +137,12 @@ export function completeConfirmDialogClose(): void {
   }
 
   activeConfirmation = next;
-  publish({ status: "confirming", message: next.message, variant: next.variant,
-    ...(next.rememberKey ? { rememberKey: next.rememberKey } : {}) });
+  publish({
+    status: "confirming",
+    message: next.message,
+    variant: next.variant,
+    ...(next.rememberKey ? { rememberKey: next.rememberKey } : {}),
+  });
 }
 
 export function resetConfirmDialogForTests(): void {

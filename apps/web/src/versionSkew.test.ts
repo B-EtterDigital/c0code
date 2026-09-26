@@ -131,7 +131,7 @@ describe("versionSkew", () => {
     expect(resolveVersionMismatch("0.0.34")).toMatchObject({ serverVersion: "0.0.34" });
   });
 
-  it("reads the server version from config descriptors", () => {
+  it("leaves composed runtime version guidance to the C0VIBE host", () => {
     expect(
       resolveServerConfigVersionMismatch({
         environment: {
@@ -147,9 +147,7 @@ describe("versionSkew", () => {
           },
         },
       }),
-    ).toMatchObject({
-      serverVersion: "0.0.33",
-    });
+    ).toBeNull();
   });
 
   it("keys dismissals by environment, client version, and server version", () => {

@@ -4027,28 +4027,43 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   window.addEventListener("storage", (event) => {
     if (event.key !== COMPOSER_DRAFT_STORAGE_KEY || event.storageArea !== localStorage) return;
     const current = composerDraftStore.getState();
-    const local = { state: partializeComposerDraftStoreState(current), version: COMPOSER_DRAFT_STORAGE_VERSION };
+    const local = {
+      state: partializeComposerDraftStoreState(current),
+      version: COMPOSER_DRAFT_STORAGE_VERSION,
+    };
     const merged = composerSharedStorage.receive(local, event.newValue) as
-      StorageValue<PersistedComposerDraftStoreState> | undefined;
+      | StorageValue<PersistedComposerDraftStoreState>
+      | undefined;
     if (equalComposerSnapshots(merged, local)) return;
     const normalized = normalizeCurrentPersistedComposerDraftStoreState(merged?.state);
     const draftsByThreadKey = Object.fromEntries(
       Object.entries(normalized.draftsByThreadKey).map(([key, draft]) => [
-        key, equalComposerSnapshots(draft, local.state.draftsByThreadKey[key])
+        key,
+        equalComposerSnapshots(draft, local.state.draftsByThreadKey[key])
           ? current.draftsByThreadKey[key]!
           : preserveLiveComposerDraft(toHydratedThreadDraft(draft), current.draftsByThreadKey[key]),
       ]),
     );
     // An image being converted to a data URL has no persisted representation yet.
     for (const [key, draft] of Object.entries(current.draftsByThreadKey)) {
-      if (!draftsByThreadKey[key] && draft.images.some((image) =>
-        !draft.persistedAttachments.some((attachment) => attachment.id === image.id))) draftsByThreadKey[key] = draft;
+      if (
+        !draftsByThreadKey[key] &&
+        draft.images.some(
+          (image) => !draft.persistedAttachments.some((attachment) => attachment.id === image.id),
+        )
+      )
+        draftsByThreadKey[key] = draft;
     }
     composerDraftStore.setState({
       draftsByThreadKey,
-      draftThreadsByThreadKey: Object.fromEntries(Object.entries(normalized.draftThreadsByThreadKey)
-        .map(([key, draft]) => [key, toHydratedDraftThreadState(draft)])),
-      logicalProjectDraftThreadKeyByLogicalProjectKey: normalized.logicalProjectDraftThreadKeyByLogicalProjectKey,
+      draftThreadsByThreadKey: Object.fromEntries(
+        Object.entries(normalized.draftThreadsByThreadKey).map(([key, draft]) => [
+          key,
+          toHydratedDraftThreadState(draft),
+        ]),
+      ),
+      logicalProjectDraftThreadKeyByLogicalProjectKey:
+        normalized.logicalProjectDraftThreadKeyByLogicalProjectKey,
       stickyModelSelectionByProvider: normalized.stickyModelSelectionByProvider ?? {},
       stickyActiveProvider: normalized.stickyActiveProvider ?? null,
     });

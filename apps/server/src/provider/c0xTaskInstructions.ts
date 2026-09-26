@@ -10,7 +10,10 @@ export const C0CODE_TASK_LIST_INSTRUCTIONS = [
   "</c0code_task_list>",
 ].join("\n");
 
-export function withC0CodeTaskInstructions(input: string | undefined, enabled: boolean): string | undefined {
+export function withC0CodeTaskInstructions(
+  input: string | undefined,
+  enabled: boolean,
+): string | undefined {
   // Preserve genuinely promptless continuations and every non-C0CODE caller.
   if (!enabled || input === undefined) return input;
   return `${C0CODE_TASK_LIST_INSTRUCTIONS}\n\n${input}`;

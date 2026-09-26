@@ -47,7 +47,10 @@ import { primaryServerSettingsAtom, serverEnvironment } from "~/state/server";
 import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useTheme } from "./useTheme";
-import { CLIENT_SETTINGS_STORAGE_KEY, readBrowserClientSettings } from "../clientPersistenceStorage";
+import {
+  CLIENT_SETTINGS_STORAGE_KEY,
+  readBrowserClientSettings,
+} from "../clientPersistenceStorage";
 
 const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";
 
@@ -86,13 +89,21 @@ function replaceClientSettingsSnapshot(settings: ClientSettings): void {
 
 /** Sibling C0CODE panes share storage but keep separate React snapshots. */
 export function applySharedOnboardingCompletion(settings: ClientSettings | null): void {
-  if (!settings?.onboardingCompletedAt || settings.onboardingCompletedAt === clientSettingsSnapshot.onboardingCompletedAt) return;
-  replaceClientSettingsSnapshot({ ...clientSettingsSnapshot, onboardingCompletedAt: settings.onboardingCompletedAt });
+  if (
+    !settings?.onboardingCompletedAt ||
+    settings.onboardingCompletedAt === clientSettingsSnapshot.onboardingCompletedAt
+  )
+    return;
+  replaceClientSettingsSnapshot({
+    ...clientSettingsSnapshot,
+    onboardingCompletedAt: settings.onboardingCompletedAt,
+  });
 }
 
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (event) => {
-    if (event.key === CLIENT_SETTINGS_STORAGE_KEY) applySharedOnboardingCompletion(readBrowserClientSettings());
+    if (event.key === CLIENT_SETTINGS_STORAGE_KEY)
+      applySharedOnboardingCompletion(readBrowserClientSettings());
   });
 }
 
@@ -177,8 +188,10 @@ async function hydrateClientSettings(): Promise<void> {
 const defaultClientSettingsPersistence = (settings: ClientSettings): Promise<void> => {
   // A late preference write from another pane must not erase completed setup.
   const saved = readBrowserClientSettings();
-  const next = settings.onboardingCompletedAt || !saved?.onboardingCompletedAt
-    ? settings : { ...settings, onboardingCompletedAt: saved.onboardingCompletedAt };
+  const next =
+    settings.onboardingCompletedAt || !saved?.onboardingCompletedAt
+      ? settings
+      : { ...settings, onboardingCompletedAt: saved.onboardingCompletedAt };
   return ensureLocalApi().persistence.setClientSettings(next);
 };
 

@@ -684,101 +684,96 @@ function RightPanelEmptyState(props: {
     );
 
   const surfaceCards = (
-        <div className="grid grid-cols-2 gap-2">
-          {actions.map((action) =>
-            action.available ? (
-              // The card is itself a button, so the profile chooser sits beside
-              // it in a wrapper rather than inside it. Hover lives on the
-              // wrapper: the chooser overlays the card, and a pointer moving
-              // onto it must not read as leaving the card.
-              <div
-                key={action.label}
-                className="group relative"
-                onMouseEnter={() => setHighlight(availableActions.indexOf(action))}
-                onMouseLeave={() =>
-                  setHighlight((current) =>
-                    current === availableActions.indexOf(action) ? -1 : current,
-                  )
-                }
-              >
-                <button
-                  type="button"
-                  onClick={action.onClick}
-                  className={cn(
-                    // Full height: the wrapper is the grid item that stretches
-                    // to the row, so the button must fill it to stay level with
-                    // its neighbour and keep the chooser anchored inside.
-                    "relative flex h-full w-full cursor-pointer flex-col items-start p-4 text-left transition group-hover:border-border group-hover:bg-accent/60",
-                    cardShellClass,
-                    isHighlighted(action) && highlightedCardClass,
-                  )}
-                >
-                  <Kbd className="absolute top-3 right-3">{action.shortcut}</Kbd>
-                  <span className="flex items-center gap-2 pe-8">
-                    {actionIcon(action)}
-                    <span className="font-medium text-sm">{action.label}</span>
-                  </span>
-                  <span className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
-                    {action.description}
-                  </span>
-                </button>
-                {/*
+    <div className="grid grid-cols-2 gap-2">
+      {actions.map((action) =>
+        action.available ? (
+          // The card is itself a button, so the profile chooser sits beside
+          // it in a wrapper rather than inside it. Hover lives on the
+          // wrapper: the chooser overlays the card, and a pointer moving
+          // onto it must not read as leaving the card.
+          <div
+            key={action.label}
+            className="group relative"
+            onMouseEnter={() => setHighlight(availableActions.indexOf(action))}
+            onMouseLeave={() =>
+              setHighlight((current) =>
+                current === availableActions.indexOf(action) ? -1 : current,
+              )
+            }
+          >
+            <button
+              type="button"
+              onClick={action.onClick}
+              className={cn(
+                // Full height: the wrapper is the grid item that stretches
+                // to the row, so the button must fill it to stay level with
+                // its neighbour and keep the chooser anchored inside.
+                "relative flex h-full w-full cursor-pointer flex-col items-start p-4 text-left transition group-hover:border-border group-hover:bg-accent/60",
+                cardShellClass,
+                isHighlighted(action) && highlightedCardClass,
+              )}
+            >
+              <Kbd className="absolute top-3 right-3">{action.shortcut}</Kbd>
+              <span className="flex items-center gap-2 pe-8">
+                {actionIcon(action)}
+                <span className="font-medium text-sm">{action.label}</span>
+              </span>
+              <span className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
+                {action.description}
+              </span>
+            </button>
+            {/*
                   Same choice the tab bar's "+" menu offers: the card opens the
                   default profile, the chevron picks another. Only worth showing
                   once there is something to choose between.
                 */}
-                {action.label === "Browser" && props.browserProfiles.length > 1 ? (
-                  <Menu>
-                    <MenuTrigger
-                      render={
-                        <Button
-                          aria-label="Open browser in a profile"
-                          className="absolute right-3 bottom-3 [--control-icon-color:currentColor]"
-                          size="icon-xs"
-                          variant="ghost-muted"
-                        />
-                      }
+            {action.label === "Browser" && props.browserProfiles.length > 1 ? (
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <Button
+                      aria-label="Open browser in a profile"
+                      className="absolute right-3 bottom-3 [--control-icon-color:currentColor]"
+                      size="icon-xs"
+                      variant="ghost-muted"
+                    />
+                  }
+                >
+                  <ChevronDown className="size-3.5" />
+                </MenuTrigger>
+                <MenuPopup align="end" side="bottom" sideOffset={6} className="min-w-40 max-w-56">
+                  {props.browserProfiles.map((profile) => (
+                    <MenuItem
+                      key={profile.id}
+                      onClick={() => props.onAddBrowserInProfile(profile.id)}
                     >
-                      <ChevronDown className="size-3.5" />
-                    </MenuTrigger>
-                    <MenuPopup
-                      align="end"
-                      side="bottom"
-                      sideOffset={6}
-                      className="min-w-40 max-w-56"
-                    >
-                      {props.browserProfiles.map((profile) => (
-                        <MenuItem
-                          key={profile.id}
-                          onClick={() => props.onAddBrowserInProfile(profile.id)}
-                        >
-                          <span className="min-w-0 truncate">{profile.name}</span>
-                        </MenuItem>
-                      ))}
-                    </MenuPopup>
-                  </Menu>
-                ) : null}
-              </div>
-            ) : (
-              <div
-                key={action.label}
-                className={cn(
-                  "relative flex w-full flex-col items-start p-4 opacity-40",
-                  cardShellClass,
-                )}
-              >
-                <Kbd className="absolute top-3 right-3">{action.shortcut}</Kbd>
-                <span className="flex items-center gap-2 pe-8">
-                  {actionIcon(action)}
-                  <span className="font-medium text-sm">{action.label}</span>
-                </span>
-                <span className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
-                  {action.disabledReason}
-                </span>
-              </div>
-            ),
-          )}
-        </div>
+                      <span className="min-w-0 truncate">{profile.name}</span>
+                    </MenuItem>
+                  ))}
+                </MenuPopup>
+              </Menu>
+            ) : null}
+          </div>
+        ) : (
+          <div
+            key={action.label}
+            className={cn(
+              "relative flex w-full flex-col items-start p-4 opacity-40",
+              cardShellClass,
+            )}
+          >
+            <Kbd className="absolute top-3 right-3">{action.shortcut}</Kbd>
+            <span className="flex items-center gap-2 pe-8">
+              {actionIcon(action)}
+              <span className="font-medium text-sm">{action.label}</span>
+            </span>
+            <span className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
+              {action.disabledReason}
+            </span>
+          </div>
+        ),
+      )}
+    </div>
   );
 
   const launcherHeading = (
@@ -807,7 +802,10 @@ function RightPanelEmptyState(props: {
       )}
     >
       {hasShellContent ? (
-        <div className="flex min-h-full w-full max-w-lg shrink-0 flex-col gap-6" data-c0x-launcher-sections>
+        <div
+          className="flex min-h-full w-full max-w-lg shrink-0 flex-col gap-6"
+          data-c0x-launcher-sections
+        >
           {shellConfig.smarch ? (
             <div className="shrink-0" data-c0x-launcher-section="smarch">
               <C0xSmarchSection smarch={shellConfig.smarch} />
@@ -1675,12 +1673,28 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                       </SurfaceMenuItem>
                     );
                   })}
-                  {props.onOpenC0xModule && shellConfig.modules.length > 0 ? <MenuSeparator /> : null}
-                  {props.onOpenC0xModule ? shellConfig.modules.map((module) => (
-                    <MenuItem key={module.id} disabled={!module.available} onClick={() => props.onOpenC0xModule?.(module.id)}>
-                      {module.mark ? <img src={module.mark} alt={module.title} className="h-3.5 w-auto max-w-32 object-contain" /> : module.title}
-                    </MenuItem>
-                  )) : null}
+                  {props.onOpenC0xModule && shellConfig.modules.length > 0 ? (
+                    <MenuSeparator />
+                  ) : null}
+                  {props.onOpenC0xModule
+                    ? shellConfig.modules.map((module) => (
+                        <MenuItem
+                          key={module.id}
+                          disabled={!module.available}
+                          onClick={() => props.onOpenC0xModule?.(module.id)}
+                        >
+                          {module.mark ? (
+                            <img
+                              src={module.mark}
+                              alt={module.title}
+                              className="h-3.5 w-auto max-w-32 object-contain"
+                            />
+                          ) : (
+                            module.title
+                          )}
+                        </MenuItem>
+                      ))
+                    : null}
                 </MenuPopup>
               </Menu>
             ) : null}

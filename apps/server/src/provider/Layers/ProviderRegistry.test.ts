@@ -2430,7 +2430,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               currentCodex?.status === "error" ? currentCodex : (yield* firstError)[0];
             assert.strictEqual(initialCodex?.status, "error");
             assert.strictEqual(initialCodex?.installed, false);
-            assert.deepStrictEqual(spawnedCommands, [firstMissing]);
+            // Disabled accounts may run their cached read-only quota probe.
+            // This watcher contract concerns the two Codex executable identities.
+            const codexProbes = () =>
+              spawnedCommands.filter(
+                (command) => command === firstMissing || command === secondMissing,
+              );
+            assert.deepStrictEqual(codexProbes(), [firstMissing]);
 
             const pendingRebuild = yield* Stream.toPull(
               codexSnapshots.pipe(
@@ -2455,7 +2461,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             );
             yield* Deferred.succeed(releaseSecondProbe, undefined);
             const [reprobedCodex] = yield* rebuiltError;
-            assert.deepStrictEqual(spawnedCommands, [firstMissing, secondMissing]);
+            assert.deepStrictEqual(codexProbes(), [firstMissing, secondMissing]);
             assert.strictEqual(reprobedCodex?.status, "error");
             assert.strictEqual(reprobedCodex?.installed, false);
           }).pipe(Effect.provide(runtimeServices));

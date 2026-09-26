@@ -1,10 +1,21 @@
 import { randomUUID } from "../lib/utils";
 import { useEffect } from "react";
-import { composerTargetKey, hydrateImagesFromPersisted, useComposerDraftStore, type ComposerThreadTarget } from "~/composerDraftStore";
-import { recordC0xComposerMedia } from './composerMediaReceipts';
+import {
+  composerTargetKey,
+  hydrateImagesFromPersisted,
+  useComposerDraftStore,
+  type ComposerThreadTarget,
+} from "~/composerDraftStore";
+import { recordC0xComposerMedia } from "./composerMediaReceipts";
 
 export type C0xComposerInsertResult = "inserted" | "already-present" | "empty";
-type C0xComposerImage = { dataUrl: string; name: string; mimeType: string; sizeBytes: number; mediaId?: string };
+type C0xComposerImage = {
+  dataUrl: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  mediaId?: string;
+};
 
 declare global {
   interface Window {
@@ -34,18 +45,33 @@ export function registerC0xComposer(target: ComposerThreadTarget, focus: () => v
     },
     attach(images: C0xComposerImage[]): string[] {
       return images.map((image) => {
-        if (!image.mimeType.startsWith("image/") || !image.dataUrl.startsWith("data:image/")) return "invalid-data-url";
+        if (!image.mimeType.startsWith("image/") || !image.dataUrl.startsWith("data:image/"))
+          return "invalid-data-url";
         const store = useComposerDraftStore.getState();
-        if (store.getComposerDraft(target)?.images.some((existing) => existing.previewUrl === image.dataUrl)) return "already-present";
+        if (
+          store
+            .getComposerDraft(target)
+            ?.images.some((existing) => existing.previewUrl === image.dataUrl)
+        )
+          return "already-present";
         const id = randomUUID();
         const hydrated = hydrateImagesFromPersisted([{ ...image, id }]);
         if (hydrated.length !== 1) return "invalid-data-url";
         store.addImages(target, hydrated);
-        if (useComposerDraftStore.getState().getComposerDraft(target)?.images.some((entry) => entry.id === id)) {
+        if (
+          useComposerDraftStore
+            .getState()
+            .getComposerDraft(target)
+            ?.images.some((entry) => entry.id === id)
+        ) {
           recordC0xComposerMedia(image.mediaId, { targetKey: api.targetKey, imageId: id });
         }
-        return useComposerDraftStore.getState().getComposerDraft(target)?.images.some((entry) => entry.id === id)
-          ? "attached" : "attachment-limit";
+        return useComposerDraftStore
+          .getState()
+          .getComposerDraft(target)
+          ?.images.some((entry) => entry.id === id)
+          ? "attached"
+          : "attachment-limit";
       });
     },
     focus,

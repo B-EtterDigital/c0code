@@ -74,13 +74,16 @@ beforeEach(() => {
   const localStorage = createMemoryStorage();
   vi.stubGlobal("localStorage", localStorage);
   const tails = new Map<string, Promise<unknown>>();
-  vi.stubGlobal("navigator", { userAgent: "", locks: {
-    request: (name: string, _options: unknown, action: () => Promise<unknown>) => {
-      const next = (tails.get(name) ?? Promise.resolve()).then(action);
-      tails.set(name, next);
-      return next;
+  vi.stubGlobal("navigator", {
+    userAgent: "",
+    locks: {
+      request: (name: string, _options: unknown, action: () => Promise<unknown>) => {
+        const next = (tails.get(name) ?? Promise.resolve()).then(action);
+        tails.set(name, next);
+        return next;
+      },
     },
-  } });
+  });
   vi.stubGlobal("window", {
     localStorage,
     addEventListener: vi.fn(),
@@ -106,11 +109,13 @@ async function enqueue(prompt?: string) {
 }
 
 describe("fluid steering queue", () => {
-  it('retains queue state when cross-window locking is unavailable', async () => {
+  it("retains queue state when cross-window locking is unavailable", async () => {
     const { queue, entry } = await enqueue();
-    vi.stubGlobal('navigator', { userAgent: '' });
+    vi.stubGlobal("navigator", { userAgent: "" });
     const dispatch = vi.fn(async () => true);
-    expect(await queue.dispatchFluidQueueEntry({ threadKey, mode: 'automatic', dispatch })).toBe('busy');
+    expect(await queue.dispatchFluidQueueEntry({ threadKey, mode: "automatic", dispatch })).toBe(
+      "busy",
+    );
     expect(dispatch).not.toHaveBeenCalled();
     expect(queue.readFluidQueueState().entries[0]?.id).toBe(entry.id);
     expect(await queue.removeFluidQueueEntry(threadKey, entry.id)).toBe(false);
@@ -207,14 +212,28 @@ describe("fluid steering queue", () => {
 
     const requestedAt = "2026-09-09T00:00:01.000Z";
     await queue.recordFluidQueueTurnRequest(threadKey, first.id, requestedAt);
-    const running = { turnId: TurnId.make("accepted-queued-turn"), requestedAt,
-      state: "running" as const, startedAt: requestedAt, completedAt: null, assistantMessageId: null };
+    const running = {
+      turnId: TurnId.make("accepted-queued-turn"),
+      requestedAt,
+      state: "running" as const,
+      startedAt: requestedAt,
+      completedAt: null,
+      assistantMessageId: null,
+    };
     await queue.reconcileFluidQueuePhase(threadKey, running);
     // A second window still showing the previous completed turn cannot release this claim.
-    await queue.reconcileFluidQueuePhase(threadKey, { ...running, requestedAt: "2026-09-09T00:00:00.000Z",
-      state: "completed", completedAt: requestedAt });
+    await queue.reconcileFluidQueuePhase(threadKey, {
+      ...running,
+      requestedAt: "2026-09-09T00:00:00.000Z",
+      state: "completed",
+      completedAt: requestedAt,
+    });
     expect(queue.readFluidQueueState().claimsByThreadKey[threadKey]).toBeDefined();
-    await queue.reconcileFluidQueuePhase(threadKey, { ...running, state: "completed", completedAt: "2026-09-09T00:00:02.000Z" });
+    await queue.reconcileFluidQueuePhase(threadKey, {
+      ...running,
+      state: "completed",
+      completedAt: "2026-09-09T00:00:02.000Z",
+    });
     expect(
       await queue.dispatchFluidQueueEntry({
         threadKey,

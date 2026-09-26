@@ -28,8 +28,10 @@ export function useC0xAgentSessionImport(environmentId: EnvironmentId): void {
           ...(input.openCodeSessionId ? { openCodeSessionId: input.openCodeSessionId } : {}),
         },
       });
-      if (result._tag !== "Success") throw new Error("The native session importer did not complete.");
-      if (result.value.importedCount === 0) throw new Error("The selected session could not be imported by this environment.");
+      if (result._tag !== "Success")
+        throw new Error("The native session importer did not complete.");
+      if (result.value.importedCount === 0)
+        throw new Error("The selected session could not be imported by this environment.");
       return { importedCount: result.value.importedCount };
     };
     window.__c0xImportAgentSession = invoke;

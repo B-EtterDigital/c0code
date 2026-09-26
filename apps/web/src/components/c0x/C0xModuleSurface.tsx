@@ -23,7 +23,9 @@ export function C0xModuleSurface({ moduleId }: { moduleId: string }) {
       className="flex min-h-0 flex-1 items-center justify-center"
     >
       <p className="max-w-64 px-6 text-center text-muted-foreground text-xs leading-relaxed">
-        {module ? `${module.title} renders here inside C0VIBE.` : "This surface renders inside C0VIBE."}
+        {module
+          ? `${module.title} renders here inside C0VIBE.`
+          : "This surface renders inside C0VIBE."}
       </p>
     </div>
   );

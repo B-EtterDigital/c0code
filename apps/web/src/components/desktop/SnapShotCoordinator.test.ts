@@ -44,9 +44,11 @@ const storage = vi.hoisted(() => {
 const environmentId = EnvironmentId.make("snap-shot-environment");
 const projectRef = scopeProjectRef(environmentId, ProjectId.make("snap-shot-project"));
 
-beforeEach(() => {
+beforeEach(async () => {
   storage.clear();
   vi.stubGlobal("localStorage", storage);
+  // Reset the shared-storage merge baseline as well as this test's disk.
+  await useComposerDraftStore.persist.rehydrate();
   useComposerDraftStore.setState({
     draftsByThreadKey: {},
     draftThreadsByThreadKey: {},

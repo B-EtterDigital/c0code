@@ -7,7 +7,9 @@ export function preserveLiveComposerDraft(
 ): ComposerThreadDraftState {
   if (!current) return hydrated;
   const persistedIds = new Set(current.persistedAttachments.map((attachment) => attachment.id));
-  const pending = new Set(current.images.filter((image) => !persistedIds.has(image.id)).map((image) => image.id));
+  const pending = new Set(
+    current.images.filter((image) => !persistedIds.has(image.id)).map((image) => image.id),
+  );
   const images = hydrated.images.map((image) => {
     const existing = current.images.find((candidate) => candidate.id === image.id);
     return existing ?? image;
@@ -20,15 +22,18 @@ export function preserveLiveComposerDraft(
   return {
     ...hydrated,
     images,
-    nonPersistedImageIds: current.nonPersistedImageIds.filter((id) =>
-      !hydrated.persistedAttachments.some((attachment) => attachment.id === id)),
+    nonPersistedImageIds: current.nonPersistedImageIds.filter(
+      (id) => !hydrated.persistedAttachments.some((attachment) => attachment.id === id),
+    ),
     files: hydrated.files.map((file) => ({
       ...file,
       file: current.files.find((candidate) => candidate.id === file.id)?.file ?? file.file,
     })),
     terminalContexts: hydrated.terminalContexts.map((context) => ({
       ...context,
-      text: current.terminalContexts.find((candidate) => candidate.id === context.id)?.text ?? context.text,
+      text:
+        current.terminalContexts.find((candidate) => candidate.id === context.id)?.text ??
+        context.text,
     })),
   };
 }

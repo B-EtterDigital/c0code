@@ -419,7 +419,8 @@ const make = Effect.gen(function* () {
   const codexCredentialHome = (instance: ProviderInstanceConfig): string | null => {
     if (instance.driver !== ProviderDriverKind.make("codex")) return null;
     const config = instance.config as Record<string, unknown>;
-    const shadowHome = typeof config.shadowHomePath === "string" ? config.shadowHomePath.trim() : "";
+    const shadowHome =
+      typeof config.shadowHomePath === "string" ? config.shadowHomePath.trim() : "";
     const directHome = typeof config.homePath === "string" ? config.homePath.trim() : "";
     return pathService.resolve(
       expandHomePath(shadowHome || directHome || pathService.join(NodeOS.homedir(), ".codex")),
@@ -432,9 +433,9 @@ const make = Effect.gen(function* () {
     let cursor = configuredPath;
     const missingSegments: string[] = [];
     while (true) {
-      const realPath = yield* fs.realPath(cursor).pipe(
-        Effect.match({ onFailure: () => null, onSuccess: (value) => value }),
-      );
+      const realPath = yield* fs
+        .realPath(cursor)
+        .pipe(Effect.match({ onFailure: () => null, onSuccess: (value) => value }));
       if (realPath !== null) {
         return pathService.resolve(realPath, ...missingSegments.toReversed());
       }
@@ -449,7 +450,8 @@ const make = Effect.gen(function* () {
     current: ServerSettings,
     next: ServerSettings,
   ) {
-    const homes: Array<{ id: string; configured: string; canonical: string; changed: boolean }> = [];
+    const homes: Array<{ id: string; configured: string; canonical: string; changed: boolean }> =
+      [];
     for (const [id, instance] of Object.entries(next.providerInstances)) {
       const configured = codexCredentialHome(instance);
       if (configured === null) continue;
@@ -909,10 +911,7 @@ const make = Effect.gen(function* () {
             applyServerSettingsPatch(current, patch),
           );
           yield* validateCodexHomeIsolation(current, normalizedPatch);
-          const nextPersisted = yield* persistProviderEnvironmentSecrets(
-            current,
-            normalizedPatch,
-          );
+          const nextPersisted = yield* persistProviderEnvironmentSecrets(current, normalizedPatch);
           const next = yield* normalizeServerSettings(nextPersisted);
           yield* writeSettingsAtomically(next);
           yield* Cache.set(settingsCache, cacheKey, next);
