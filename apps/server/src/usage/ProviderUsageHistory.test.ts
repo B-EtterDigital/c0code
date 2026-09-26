@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
-import migration from "../persistence/Migrations/051_ProviderUsageSamples.ts";
+import migration from "../persistence/Migrations/056_ProviderUsageSamples.ts";
 import { makeProviderUsageHistory } from "./ProviderUsageHistory.ts";
 
 const start = Date.parse("2026-09-25T12:00:00.000Z");
@@ -36,7 +36,7 @@ it.layer(NodeSqliteClient.layerMemory())("account history", (it) => {
     Effect.gen(function* () {
       const setupSql = yield* SqlClient.SqlClient;
       yield* setupSql`DROP TABLE IF EXISTS provider_usage_samples`;
-      yield* runMigrations({ toMigrationInclusive: 50 });
+      yield* runMigrations({ toMigrationInclusive: 55 });
       yield* migration;
       yield* TestClock.setTime(start);
       const history = yield* makeProviderUsageHistory;
@@ -58,7 +58,7 @@ it.layer(NodeSqliteClient.layerMemory())("account history", (it) => {
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`DROP TABLE IF EXISTS provider_usage_samples`;
-      yield* runMigrations({ toMigrationInclusive: 50 });
+      yield* runMigrations({ toMigrationInclusive: 55 });
       yield* migration;
       yield* TestClock.setTime(start);
       const history = yield* makeProviderUsageHistory;
@@ -75,7 +75,7 @@ it.layer(NodeSqliteClient.layerMemory())("account history", (it) => {
   it.effect("counts each completed turn once and keeps its recorded account after a switch", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(start);
-      yield* runMigrations({ toMigrationInclusive: 50 });
+      yield* runMigrations({ toMigrationInclusive: 55 });
       const sql = yield* SqlClient.SqlClient;
       yield* sql`DROP TABLE IF EXISTS provider_usage_samples`;
       yield* migration;
