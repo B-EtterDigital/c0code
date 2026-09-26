@@ -1,9 +1,11 @@
 import {
   EnvironmentId,
   type ProjectListEntriesResult,
+  ProjectReadFileError,
   type ProjectReadFileResult,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { Atom, AtomRegistry } from "effect/unstable/reactivity";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -116,6 +118,88 @@ describe("project query refresh", () => {
     projectMocks.readFile.mockReset();
     reactHooks.reset();
   });
+
+  it.each([
+    {
+      path: "docs",
+      failure: "path_not_file" as const,
+      folder: true,
+      message: "folder",
+      cause: undefined,
+    },
+    {
+      path: "/home/test/Videos/byteplus-live-check",
+      failure: "path_not_file" as const,
+      folder: true,
+      message: "folder",
+      cause: undefined,
+    },
+    {
+      path: "missing.txt",
+      failure: "operation_failed" as const,
+      folder: false,
+      message: "could not be found",
+      cause: new Error("workspace operation", {
+        cause: Object.assign(new Error("ENOENT: no such file"), { code: "ENOENT" }),
+      }),
+    },
+    {
+      path: "program.bin",
+      failure: "binary_file" as const,
+      folder: false,
+      message: "binary file",
+      cause: undefined,
+    },
+    {
+      path: "../private",
+      failure: "workspace_path_outside_root" as const,
+      folder: false,
+      message: "outside the allowed workspace root",
+      cause: undefined,
+    },
+    {
+      path: "private.txt",
+      failure: "operation_failed" as const,
+      folder: false,
+      message: "Permission denied",
+      cause: Object.assign(new Error("EACCES"), { code: "EACCES" }),
+    },
+  ])(
+    "preserves the typed result for $path ($failure)",
+    async ({ path, failure, folder, message, cause }) => {
+      const error = new ProjectReadFileError({
+        cwd: "/repo",
+        relativePath: path,
+        failure,
+        cause,
+        operation: "realpath-target",
+        resolvedPath: path,
+      });
+      const codec = Schema.toCodecJson(ProjectReadFileError);
+      const wireError = Schema.decodeUnknownSync(codec)(Schema.encodeUnknownSync(codec)(error));
+      const readAtom = Atom.make(Effect.fail(wireError));
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(readAtom);
+      projectMocks.readFile.mockReturnValue(readAtom);
+      projectMocks.optimisticFile.mockReturnValue(Atom.make(null));
+      atomHooks.registry = registry;
+      try {
+        await flushEffects();
+        reactHooks.beginRender();
+        const query = useProjectFileQuery(environmentId, "/repo", path);
+        expect(query.isNotFile).toBe(folder);
+        expect(query.failure).toBe(failure);
+        expect(query.resolvedPath).toBe(path);
+        expect(query.error).toContain(message);
+        expect(query.error).not.toContain("Failed to read workspace file");
+        expect(query.data).toBeNull();
+      } finally {
+        unmount();
+        registry.dispose();
+        atomHooks.registry = null;
+      }
+    },
+  );
 
   it("replaces an in-flight initial read when a workspace mutation arrives", async () => {
     const requests: Array<ReturnType<typeof deferred<ProjectReadFileResult>>> = [];
@@ -246,6 +330,64 @@ describe("project query refresh", () => {
       expect(projectMocks.readFile).not.toHaveBeenCalled();
       expect(requests).toHaveLength(0);
     } finally {
+      registry.dispose();
+      atomHooks.registry = null;
+    }
+  });
+
+  it("reports a directory named like an image as not a file", async () => {
+    const readAtom = Atom.make(
+      Effect.fail(
+        new ProjectReadFileError({
+          cwd: "/repo",
+          relativePath: "assets.png",
+          failure: "path_not_file",
+        }),
+      ),
+    );
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(readAtom);
+    projectMocks.readFile.mockReturnValue(readAtom);
+    projectMocks.optimisticFile.mockReturnValue(Atom.make(null));
+    atomHooks.registry = registry;
+
+    try {
+      await flushEffects();
+      reactHooks.beginRender();
+      const query = useProjectFileQuery(environmentId, "/repo", "assets.png");
+      expect(query.isNotFile).toBe(true);
+      expect(query.data).toBeNull();
+    } finally {
+      unmount();
+      registry.dispose();
+      atomHooks.registry = null;
+    }
+  });
+
+  it("reports a directory read as not a file", async () => {
+    const readAtom = Atom.make(
+      Effect.fail(
+        new ProjectReadFileError({
+          cwd: "/repo",
+          relativePath: ".agents/skills",
+          failure: "path_not_file",
+        }),
+      ),
+    );
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(readAtom);
+    projectMocks.readFile.mockReturnValue(readAtom);
+    projectMocks.optimisticFile.mockReturnValue(Atom.make(null));
+    atomHooks.registry = registry;
+
+    try {
+      await flushEffects();
+      reactHooks.beginRender();
+      const query = useProjectFileQuery(environmentId, "/repo", ".agents/skills");
+      expect(query.isNotFile).toBe(true);
+      expect(query.data).toBeNull();
+    } finally {
+      unmount();
       registry.dispose();
       atomHooks.registry = null;
     }

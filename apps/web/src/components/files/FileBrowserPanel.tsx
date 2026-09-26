@@ -30,7 +30,7 @@ interface FileBrowserPanelProps {
   environmentId: EnvironmentId;
   cwd: string;
   projectName: string;
-  /** File currently open in the preview pane; revealed and selected in the tree. */
+  /** Entry opened from a link; revealed and selected, and expanded if it is a folder. */
   selectedPath: string | null;
   /** Bumped when the same path should be revealed again (e.g. re-opened from search). */
   selectedPathRevealId: number;
@@ -289,6 +289,11 @@ export default function FileBrowserPanel({
       handledRevealRef.current = null;
       return;
     }
+    const selectedKind = entryKinds.get(selectedPath);
+    if (selectedKind === undefined) {
+      handledRevealRef.current = null;
+      return;
+    }
     const revealRequest = { path: selectedPath, revealId: selectedPathRevealId };
     const handledReveal = handledRevealRef.current;
     // Entry refreshes rebuild treePaths while the same preview stays open.
@@ -299,8 +304,8 @@ export default function FileBrowserPanel({
     ) {
       return;
     }
-    if (entryKinds.get(selectedPath) !== "file") return;
-    const selectedItem = model.getItem(selectedPath);
+    const selectedTreePath = selectedKind === "directory" ? `${selectedPath}/` : selectedPath;
+    const selectedItem = model.getItem(selectedTreePath);
     if (!selectedItem) return;
 
     // A selection that originated inside the tree (clicking a row, possibly
@@ -334,8 +339,9 @@ export default function FileBrowserPanel({
       if (item && "expand" in item) item.expand();
     }
 
+    if ("expand" in selectedItem) selectedItem.expand();
     selectedItem.select();
-    model.scrollToPath(selectedPath, { focus: true, offset: "center" });
+    model.scrollToPath(selectedTreePath, { focus: true, offset: "center" });
     queueMicrotask(() => {
       syncingSelectionRef.current = false;
     });
