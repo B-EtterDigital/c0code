@@ -31,7 +31,7 @@ export function useRevealInFileManager(environmentId: EnvironmentId | null) {
   const label = environmentId === null ? undefined : fileManagerRevealLabel(config);
   const openInEditor = useAtomCommand(shellEnvironment.openInEditor, { reportFailure: false });
   const revealFileInFileManager = useCallback(
-    (targetPath: string) => {
+    (targetPath: string, targetKind: "file" | "folder" = "file") => {
       if (environmentId === null) {
         return Promise.resolve(
           AsyncResult.failure<void, PreferredEditorEnvironmentRequiredError>(
@@ -54,7 +54,8 @@ export function useRevealInFileManager(environmentId: EnvironmentId | null) {
       }
       return openInEditor({
         environmentId,
-        input: { cwd: targetPath, editor: "file-manager", reveal: true },
+        // A folder opens directly. Revealing a file selects it in its parent.
+        input: { cwd: targetPath, editor: "file-manager", reveal: targetKind === "file" },
       });
     },
     [config?.availableEditors, environmentId, label, openInEditor],

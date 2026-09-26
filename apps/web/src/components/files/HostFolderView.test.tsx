@@ -4,6 +4,7 @@ import { act, type ComponentProps } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { HostFolderView } from "./HostFolderView";
+import { useRevealInFileManager } from "../../hooks/useRevealInFileManager";
 
 const mocks = vi.hoisted(() => ({ config: vi.fn(), reveal: vi.fn(), copy: vi.fn() }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => mocks.config() }));
@@ -51,7 +52,22 @@ describe("external folder view", () => {
     await act(() => reveal!.props.onClick());
     expect(mocks.reveal).toHaveBeenCalledExactlyOnceWith({
       environmentId,
-      input: { cwd: path, editor: "file-manager", reveal: true },
+      input: { cwd: path, editor: "file-manager", reveal: false },
+    });
+  });
+
+  it("keeps the existing file reveal behavior for chat links", async () => {
+    function ChatFileAction() {
+      const { revealFileInFileManager } = useRevealInFileManager(environmentId);
+      return <button onClick={() => revealFileInFileManager(path + "/clip.mp4")}>Reveal</button>;
+    }
+    await act(() => {
+      renderer = create(<ChatFileAction />);
+    });
+    await act(() => renderer.root.findByType("button").props.onClick());
+    expect(mocks.reveal).toHaveBeenCalledExactlyOnceWith({
+      environmentId,
+      input: { cwd: path + "/clip.mp4", editor: "file-manager", reveal: true },
     });
   });
 
