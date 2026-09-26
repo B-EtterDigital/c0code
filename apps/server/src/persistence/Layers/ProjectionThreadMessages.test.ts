@@ -1,4 +1,4 @@
-import { MessageId, ThreadId, TurnId } from "@t3tools/contracts";
+import { ComposerContextId, MessageId, ThreadId, TurnId } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -12,6 +12,44 @@ const layer = it.layer(
 );
 
 layer("ProjectionThreadMessageRepository", (it) => {
+  it.effect("retains reasoning and context across streaming and final updates", () =>
+    Effect.gen(function* () {
+      const repository = yield* ProjectionThreadMessageRepository;
+      const identity = {
+        messageId: MessageId.make("reasoning-context"),
+        threadId: ThreadId.make("thread-context"),
+        turnId: null,
+        role: "reasoning" as const,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      };
+      const context = {
+        version: 1 as const,
+        records: [
+          {
+            version: 1 as const,
+            contextId: ComposerContextId.make("ctx_saved"),
+            kind: "mention" as const,
+            label: "saved file",
+            path: "src/example.ts",
+          },
+        ],
+      };
+      yield* repository.appendStreaming({ ...identity, text: "Saved ", context });
+      yield* repository.appendStreaming({ ...identity, text: "summary" });
+      const streaming = yield* repository.getByMessageId({ messageId: identity.messageId });
+      assert.strictEqual(streaming._tag, "Some");
+      if (streaming._tag !== "Some") return;
+      assert.strictEqual(streaming.value.text, "Saved summary");
+      assert.deepEqual(streaming.value.context, context);
+      yield* repository.upsert({ ...identity, text: "Saved summary", isStreaming: false });
+      const messages = yield* repository.listByThreadId({ threadId: identity.threadId });
+      assert.strictEqual(messages[0]?.role, "reasoning");
+      assert.strictEqual(messages[0]?.isStreaming, false);
+      assert.deepEqual(messages[0]?.context, context);
+    }),
+  );
+
   it.effect("finds the latest live user-message time within one thread", () =>
     Effect.gen(function* () {
       const repository = yield* ProjectionThreadMessageRepository;

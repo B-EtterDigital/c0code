@@ -1364,3 +1364,21 @@ it("isProviderSendTurnSupportedImageMimeType accepts raster formats and rejects 
   assert.strictEqual(isProviderSendTurnSupportedImageMimeType("IMAGE/JPEG"), true);
   assert.strictEqual(isProviderSendTurnSupportedImageMimeType("image/svg+xml"), false);
 });
+
+// Stored events from before turn ids must not prevent server startup.
+it.effect("decodes a stored reasoning message without a turn id", () =>
+  Effect.gen(function* () {
+    const payload = yield* decodeThreadMessageSentPayload({
+      threadId: "thread-legacy",
+      messageId: "reasoning-legacy",
+      role: "reasoning",
+      text: "Saved provider summary",
+      streaming: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(payload.turnId, null);
+    assert.strictEqual(payload.role, "reasoning");
+    assert.strictEqual(payload.text, "Saved provider summary");
+  }),
+);
