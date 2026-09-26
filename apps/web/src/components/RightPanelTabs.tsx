@@ -1391,7 +1391,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     >
       <div
         className={cn(
-          "flex h-[calc(var(--workspace-topbar-height)*1.3)] min-h-[calc(var(--workspace-topbar-height)*1.3)] shrink-0 items-end border-slate-900/10 border-b pb-1 pl-2 dark:border-white/[0.08]",
+          "flex h-[calc(var(--workspace-topbar-height)*1.3+1rem)] min-h-[calc(var(--workspace-topbar-height)*1.3+1rem)] shrink-0 items-end border-slate-900/10 border-b pb-2 pl-2 dark:border-white/[0.08]",
           // The sheet overlays from the viewport top, so its tab bar keeps
           // the titlebar's height: a compact row re-centers the layout
           // controls a few pixels higher and the cluster jumps on open.
@@ -1477,7 +1477,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   onContextMenu={(event) => void handleTabContextMenu(event, surface)}
                   style={tabStyle}
                   className={cn(
-                    "cursor-pointer group/tab flex h-6 max-w-36 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
+                    "cursor-pointer group/tab flex h-8 max-w-36 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
                     ownsDesktopTitleBar && "[-webkit-app-region:no-drag]",
                     props.onMoveSurface && "cursor-grab touch-none",
                     dragged && "cursor-grabbing",
@@ -1594,7 +1594,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   render={
                     <Button
                       aria-label="Add panel surface"
-                      className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
+                      className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
                       size="icon-xs"
                       variant="ghost"
                     />
