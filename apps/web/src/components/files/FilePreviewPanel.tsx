@@ -52,6 +52,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 
 import FileBrowserPanel from "./FileBrowserPanel";
+import { HostFolderView } from "./HostFolderView";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
 import {
@@ -988,16 +989,22 @@ export default function FilePreviewPanel({
   const isHtml = relativePath !== null && !isPdf && isBrowserPreviewFile(relativePath);
   // A file outside the workspace (an absolute path) is shown, never edited.
   const isHostFile =
-    attachment !== undefined || (relativePath !== null && isAbsolutePath(relativePath));
+    attachment !== undefined ||
+    (relativePath !== null && (isAbsolutePath(relativePath) || relativePath.startsWith("~/")));
   const file = useProjectFileQuery(
     environmentId,
     cwd,
-    relativePath,
-    attachment === undefined && !isMedia && !isPdf,
+    relativePath?.startsWith("~/") ? resolvePathLinkTarget(relativePath, cwd) : relativePath,
+    attachment === undefined,
   );
+  // The server identifies folders, including names that look like media files.
+  // Workspace folders use the tree; host folders get their own small surface.
+  const isDirectory = attachment === undefined && file.isNotFile;
+  const isWorkspaceDirectory = isDirectory && !isHostFile;
+  const previewPath = isWorkspaceDirectory ? null : relativePath;
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   const showExplorer = shouldShowFileExplorer({
-    relativePath,
+    relativePath: previewPath,
     explorerOpen,
     attachmentOpen: attachment !== undefined,
   });
@@ -1020,19 +1027,20 @@ export default function FilePreviewPanel({
     null,
   );
   const breadcrumbRef = useRef<HTMLDivElement>(null);
-  const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
+  const isMarkdown = !isDirectory && relativePath ? isMarkdownPreviewFile(relativePath) : false;
   // A reveal still wins over the preference: the line only exists in the source.
   const revealHandled =
     revealLine === null ||
     (handledReveal?.path === relativePath && handledReveal.requestId === revealRequestId);
   const renderMarkdown = isMarkdown && renderMarkdownPreferred && revealHandled;
   const renderBrowserFile = isPdf || (isHtml && renderBrowserFilePreferred && revealHandled);
-  const canToggleRendered = attachment === undefined && (isMarkdown || isHtml);
+  const canToggleRendered = !isDirectory && attachment === undefined && (isMarkdown || isHtml);
   const rendered = isMarkdown ? renderMarkdown : renderBrowserFile;
   const setRenderedPreferred = isMarkdown
     ? setRenderMarkdownPreferred
     : setRenderBrowserFilePreferred;
   const canOpenInBrowser =
+    !isDirectory &&
     relativePath !== null &&
     attachment === undefined &&
     !isVideo &&
@@ -1045,8 +1053,7 @@ export default function FilePreviewPanel({
     enabled:
       attachment === undefined &&
       relativePath !== null &&
-      !isMedia &&
-      !isPdf &&
+      (isDirectory || (!isMedia && !isPdf)) &&
       !selectedFilePending,
     mutationId: workspaceMutationId,
     refresh: file.refresh,
@@ -1134,7 +1141,8 @@ export default function FilePreviewPanel({
               </div>
             </ScrollArea>
           )}
-          {absolutePath &&
+          {!isDirectory &&
+          absolutePath &&
           (environmentId === primaryEnvironmentId || remoteOpenState.mode !== "local-exec") ? (
             <OpenInPicker
               environmentId={environmentId}
@@ -1190,7 +1198,7 @@ export default function FilePreviewPanel({
               <TooltipPopup>Open file in preview browser</TooltipPopup>
             </Tooltip>
           ) : null}
-          {!isHostFile ? (
+          {!isHostFile && previewPath !== null ? (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -1213,19 +1221,32 @@ export default function FilePreviewPanel({
           ) : null}
         </div>
       ) : null}
-      {relativePath && !isMedia && !renderBrowserFile && file.data?.truncated ? (
+      {!isDirectory && previewPath && !isMedia && !renderBrowserFile && file.data?.truncated ? (
         <div className="shrink-0 border-b border-warning/20 bg-warning-surface px-3 py-1.5 text-[11px] text-warning-foreground">
           Preview limited to the first 1 MB of a {file.data.byteLength.toLocaleString()} byte file.
         </div>
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
-          className={cn(
-            "min-w-0 flex-1 flex-col overflow-hidden",
-            relativePath ? "flex" : "hidden",
-          )}
+          className={cn("min-w-0 flex-1 flex-col overflow-hidden", previewPath ? "flex" : "hidden")}
         >
-          {relativePath && attachment ? (
+          {isWorkspaceDirectory ? null : isDirectory && absolutePath ? (
+            <HostFolderView
+              key={absolutePath}
+              environmentId={environmentId}
+              path={file.resolvedPath ?? absolutePath}
+            />
+          ) : relativePath &&
+            file.error &&
+            file.data === null &&
+            !(file.failure === "binary_file" && (isMedia || isPdf)) ? (
+            <div
+              role="alert"
+              className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive"
+            >
+              {file.error}
+            </div>
+          ) : relativePath && attachment ? (
             <AttachmentBrowserPreview environmentId={environmentId} attachment={attachment} />
           ) : relativePath && isVideo && absolutePath ? (
             <WorkspaceVideoPreview
@@ -1257,10 +1278,6 @@ export default function FilePreviewPanel({
               title={relativePath}
               workspaceMutationId={workspaceMutationId}
             />
-          ) : relativePath && file.error && file.data === null ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">
-              {file.error}
-            </div>
           ) : relativePath && file.data === null ? (
             <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
               <Spinner className="size-5" />
@@ -1332,7 +1349,7 @@ export default function FilePreviewPanel({
           <aside
             className={cn(
               "flex min-h-0 shrink-0 bg-background",
-              relativePath
+              previewPath
                 ? "w-[min(22rem,46%)] min-w-64 border-l border-border/60"
                 : "min-w-0 flex-1",
             )}
@@ -1346,7 +1363,7 @@ export default function FilePreviewPanel({
               selectedPathRevealId={revealRequestId}
               onOpenFile={onOpenFile}
               workspaceMutationId={workspaceMutationId}
-              {...(relativePath && !isMedia && !isPdf
+              {...(previewPath && !isMedia && !isPdf
                 ? { onRefreshSelectedFile: file.refresh }
                 : {})}
             />
