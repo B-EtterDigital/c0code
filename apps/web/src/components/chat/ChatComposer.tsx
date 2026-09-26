@@ -2249,6 +2249,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     planModeEnabled: settings.planModeEnabled,
   });
   const providerTraitsPickerInput = {
+    onOpenModelPicker: () => setIsComposerModelPickerOpen(true),
     provider: selectedProvider,
     instanceId: selectedInstanceId,
     ...(routeKind === "server" ? { threadRef: routeThreadRef } : {}),

@@ -272,6 +272,7 @@ export function shouldRenderTraitsControls(input: {
 
 export interface TraitsMenuContentProps {
   presentation?: 'menu' | 'effort' | 'remaining';
+  onOpenModelPicker?: (() => void) | undefined;
   provider: ProviderDriverKind;
   instanceId?: ProviderInstanceId;
   models: ReadonlyArray<ServerProviderModel>;
@@ -297,6 +298,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
   allowPromptInjectedEffort = true,
   planModeEnabled,
   presentation = 'menu',
+  onOpenModelPicker,
   ...persistence
 }: TraitsMenuContentProps & TraitsPersistence) {
   const setProviderModelOptions = useComposerDraftStore((store) => store.setProviderModelOptions);
@@ -371,7 +373,21 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
     if (!effortDescriptor) return null;
     const value = ultrathinkPromptControlled && effortDescriptor.id === primarySelectDescriptor?.id
       ? 'ultrathink' : String(getProviderOptionCurrentValue(effortDescriptor) ?? '');
+    const fast = descriptors.find((descriptor) => descriptor.id === 'fastMode' || descriptor.id === 'serviceTier');
+    const fastChoice = fast?.type === 'select' ? fast.options.find((option) => option.label === 'Fast') : undefined;
+    const normalChoice = fast?.type === 'select' ? fast.options.find((option) => option.isDefault || option.id === 'default') : undefined;
+    const fastEnabled = fast?.type === 'boolean' ? fast.currentValue === true : fastChoice !== undefined && getProviderOptionCurrentValue(fast ?? null) === fastChoice.id;
+    const toggleFast = fast?.type === 'boolean' ? () => updateDescriptors(replaceDescriptorCurrentValue(descriptors, fast.id, !fastEnabled))
+      : fast?.type === 'select' && fastChoice && normalChoice ? () => handleSelectChange(fast, fastEnabled ? normalChoice.id : fastChoice.id) : undefined;
     return <C0xEffortSlider
+      modelLabel={models.find((item) => item.slug === model)?.name ?? model ?? 'Current model'}
+      onOpenModelPicker={onOpenModelPicker}
+      fastEnabled={fastEnabled}
+      onToggleFast={toggleFast}
+      onReset={() => {
+        const reset = effortDescriptor.options.find((option) => option.isDefault) ?? effortDescriptor.options[0];
+        if (reset) handleSelectChange(effortDescriptor, reset.id);
+      }}
       options={effortDescriptor.options}
       effort={value}
       disabled={modelIsUnavailable || (ultrathinkInBodyText && effortDescriptor.id === primarySelectDescriptor?.id)}
@@ -569,6 +585,7 @@ export const TraitsPicker = memo(function TraitsPicker({
   isComposerOwned,
   size = "sm",
   hidden = false,
+  onOpenModelPicker,
   ...persistence
 }: TraitsMenuContentProps &
   TraitsPersistence & {
@@ -630,6 +647,7 @@ export const TraitsPicker = memo(function TraitsPicker({
     <div className="flex min-w-0 items-center gap-2">
       <TraitsMenuContent
         presentation="effort"
+        onOpenModelPicker={onOpenModelPicker}
         provider={provider}
         {...(instanceId ? { instanceId } : {})}
         models={models} model={model} prompt={prompt} onPromptChange={onPromptChange}

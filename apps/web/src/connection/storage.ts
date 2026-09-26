@@ -260,7 +260,7 @@ export interface CatalogBackend {
 }
 
 export function makeCatalogBackend(database: IDBDatabase): CatalogBackend {
-  const bridge = window.desktopBridge;
+  const bridge = window.c0codeConnectionBridge ?? window.desktopBridge;
   if (bridge?.getConnectionCatalog !== undefined && bridge.setConnectionCatalog !== undefined) {
     return {
       read: Effect.tryPromise({

@@ -21,7 +21,28 @@ interface ImportMeta {
 }
 
 declare global {
+  type C0CodeConnectionBridge = Pick<
+    DesktopBridge,
+    | "getConnectionCatalog"
+    | "setConnectionCatalog"
+    | "discoverSshHosts"
+    | "resolveSshHost"
+    | "ensureSshEnvironment"
+    | "disconnectSshEnvironment"
+    | "fetchSshEnvironmentDescriptor"
+    | "bootstrapSshBearerSession"
+    | "fetchSshSessionState"
+    | "issueSshWebSocketTicket"
+  >;
+
   interface Window {
     desktopBridge?: DesktopBridge;
+    c0codeConnectionBridge?: C0CodeConnectionBridge;
+    c0codeAccountsBridge?: {
+      pickProjectLogo(): Promise<string | null>;
+      syncAccounts(statuses: ReadonlyArray<{ instanceId: string; auth: string }>): Promise<{ count: number }>;
+      openRouterStatus(): Promise<{ configured: boolean }>;
+      saveOpenRouterKey(key: string | null): Promise<{ configured: boolean }>;
+    };
   }
 }

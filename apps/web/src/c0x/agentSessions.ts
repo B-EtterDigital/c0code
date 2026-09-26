@@ -6,6 +6,7 @@ import { useAtomCommand } from "../state/use-atom-command";
 interface NativeSessionImport {
   projectId: string;
   workspaceRoot: string;
+  openCodeSessionId?: string;
 }
 
 declare global {
@@ -24,6 +25,7 @@ export function useC0xAgentSessionImport(environmentId: EnvironmentId): void {
         input: {
           projectId: ProjectId.make(input.projectId),
           expectedWorkspaceRoot: input.workspaceRoot,
+          ...(input.openCodeSessionId ? { openCodeSessionId: input.openCodeSessionId } : {}),
         },
       });
       if (result._tag !== "Success") throw new Error("The native session importer did not complete.");

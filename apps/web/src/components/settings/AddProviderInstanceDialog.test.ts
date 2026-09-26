@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolveWizardNavigation } from "./AddProviderInstanceDialog.logic";
+import {
+  resolveWizardNavigation,
+  withIsolatedCodexHome,
+} from "./AddProviderInstanceDialog.logic";
+
+describe("withIsolatedCodexHome", () => {
+  it("gives a new Codex account a stable instance-owned credential home", () => {
+    expect(withIsolatedCodexHome("codex", "codex_work", {})).toEqual({
+      homePath: "~/.codex/accounts/codex_work",
+    });
+  });
+
+  it("preserves explicit direct and shadow homes", () => {
+    expect(withIsolatedCodexHome("codex", "codex_work", { homePath: "/existing/codex" }))
+      .toEqual({ homePath: "/existing/codex" });
+    expect(withIsolatedCodexHome("codex", "codex_work", { shadowHomePath: "/isolated/codex" }))
+      .toEqual({ shadowHomePath: "/isolated/codex" });
+  });
+
+  it("does not add a Codex home to other provider drivers", () => {
+    expect(withIsolatedCodexHome("claude", "claude_work", {})).toEqual({});
+  });
+});
 
 describe("resolveWizardNavigation", () => {
   const invalidId = { instanceIdError: "Instance ID is required." };

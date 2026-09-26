@@ -1,3 +1,4 @@
+import { randomUUID } from "../lib/utils";
 import type {
   EnvironmentId,
   ModelSelection,
@@ -262,7 +263,7 @@ export async function setFluidQueueEnabled(enabled: boolean): Promise<boolean> {
 }
 
 function uniqueId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random()}`;
+  return randomUUID();
 }
 
 function persistedImageFor(

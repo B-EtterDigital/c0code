@@ -7,6 +7,24 @@ const IDENTITY_STEP = 1;
 export const ADD_PROVIDER_WIZARD_STEPS = ["Driver", "Identity", "Config"] as const;
 
 /**
+ * A newly named Codex instance must not inherit the machine-wide ~/.codex.
+ * Explicit direct or shadow homes are user intent and remain untouched; the
+ * instance id, unlike the display label, is stable across renames.
+ */
+export function withIsolatedCodexHome(
+  driver: string,
+  instanceId: string,
+  config: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  if (driver !== "codex") return { ...config };
+  const homePath = typeof config.homePath === "string" ? config.homePath.trim() : "";
+  const shadowHomePath =
+    typeof config.shadowHomePath === "string" ? config.shadowHomePath.trim() : "";
+  if (homePath.length > 0 || shadowHomePath.length > 0) return { ...config };
+  return { ...config, homePath: `~/.codex/accounts/${instanceId}` };
+}
+
+/**
  * Resolve navigation within the add-provider wizard.
  *
  * Moving forward past Identity requires a valid instance id, whether the user

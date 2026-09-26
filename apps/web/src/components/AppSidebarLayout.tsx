@@ -45,6 +45,8 @@ import {
   useSidebarVisibility,
 } from "./ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { C0xProjectLogos } from "./c0x/C0xProjectLogos";
+import { C0xHostControls } from "./c0x/C0xHostControls";
 
 const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "90px";
 
@@ -227,6 +229,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         style={sidebarProviderStyle}
       >
         <ProjectProjectionRetention />
+        <C0xProjectLogos />
+        <C0xHostControls />
         <Sidebar
           side="left"
           collapsible="offcanvas"

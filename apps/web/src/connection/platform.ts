@@ -144,7 +144,7 @@ function sshPreparationError(cause: unknown) {
 
 export const provisionDesktopSshEnvironment = Effect.fn(
   "web.connectionPlatform.ssh.provisionDesktop",
-)(function* (bridge: DesktopBridge, target: DesktopSshEnvironmentTarget) {
+)(function* (bridge: Pick<DesktopBridge, "ensureSshEnvironment" | "fetchSshEnvironmentDescriptor" | "bootstrapSshBearerSession">, target: DesktopSshEnvironmentTarget) {
   const bootstrap = yield* Effect.tryPromise({
     try: () =>
       bridge.ensureSshEnvironment(target, {
@@ -226,7 +226,7 @@ const capabilitiesLayer = Layer.effectContext(
     });
     const ssh = SshEnvironmentGateway.of({
       provision: Effect.fn("web.connectionPlatform.ssh.provision")(function* (target) {
-        const bridge = window.desktopBridge;
+        const bridge = window.c0codeConnectionBridge ?? window.desktopBridge;
         if (bridge === undefined) {
           return yield* new ConnectionBlockedError({
             reason: "unsupported",
@@ -236,7 +236,7 @@ const capabilitiesLayer = Layer.effectContext(
         return yield* provisionDesktopSshEnvironment(bridge, target);
       }),
       prepare: Effect.fn("web.connectionPlatform.ssh.prepare")(function* (input) {
-        const bridge = window.desktopBridge;
+        const bridge = window.c0codeConnectionBridge ?? window.desktopBridge;
         if (bridge === undefined) {
           return yield* new ConnectionBlockedError({
             reason: "unsupported",
@@ -267,7 +267,7 @@ const capabilitiesLayer = Layer.effectContext(
         };
       }),
       disconnect: Effect.fn("web.connectionPlatform.ssh.disconnect")(function* (target) {
-        const bridge = window.desktopBridge;
+        const bridge = window.c0codeConnectionBridge ?? window.desktopBridge;
         if (bridge === undefined) {
           return;
         }

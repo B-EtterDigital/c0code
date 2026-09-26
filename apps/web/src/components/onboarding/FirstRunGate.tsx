@@ -150,10 +150,17 @@ export function FirstRunGate({
       });
 
   useEffect(() => {
-    if (decision === "wizard" || !hydrated) return;
+    if (!hydrated) return;
+    if (onboardingCompletedAt !== null) {
+      setGateState((state) => transitionFirstRunGateState(state, { type: "completed" }));
+      return;
+    }
+    if (decision === "wizard") return;
 
     if (persistCompletion && onboardingCompletedAt === null) {
-      void completeOnboarding().catch(() => undefined);
+      void completeOnboarding().catch((error: unknown) => {
+        console.error("[c0x-t3-error] onboarding.autoComplete", String(error));
+      });
     }
 
     setGateState((state) =>
@@ -181,10 +188,10 @@ export function FirstRunGate({
   }, [decision, enabled, hydrated]);
 
   useEffect(() => {
-    if (decision === "wizard" && pathname !== "/welcome") {
+    if (decision === "wizard" && onboardingCompletedAt === null && pathname !== "/welcome") {
       void navigate({ to: "/welcome", replace: true });
     }
-  }, [decision, navigate, pathname]);
+  }, [decision, navigate, onboardingCompletedAt, pathname]);
 
   if (settingsReadFailed) {
     return <FirstRunRecovery reason="settings" retrying={hydrationStatus === "retrying"} />;
@@ -212,7 +219,7 @@ function FirstRunRecovery({
         <p className="mt-2 text-sm text-muted-foreground">
           {settingsReadFailed
             ? "Your saved settings could not be loaded."
-            : "T3 Code could not confirm this workspace."}
+            : "C0CODE could not confirm this workspace."}
         </p>
         <Button
           className="mt-5"
@@ -221,7 +228,9 @@ function FirstRunRecovery({
           disabled={retrying}
           onClick={() => {
             if (settingsReadFailed) {
-              void ensureClientSettingsHydrated().catch(() => undefined);
+              void ensureClientSettingsHydrated().catch((error: unknown) => {
+                console.error("[c0x-t3-error] onboarding.settingsRetry", String(error));
+              });
             } else {
               window.location.reload();
             }

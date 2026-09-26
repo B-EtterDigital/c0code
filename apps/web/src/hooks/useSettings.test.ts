@@ -18,6 +18,7 @@ vi.mock("~/localApi", () => ({
 import {
   __resetClientSettingsPersistenceForTests,
   __setClientSettingsForTests,
+  applySharedOnboardingCompletion,
   ensureClientSettingsHydrated,
   getClientSettings,
   mergeEnvironmentSettings,
@@ -44,6 +45,14 @@ describe("client settings hydration", () => {
   };
   const onboardingCompletedAt = "2026-09-05T12:00:00.000Z";
   const complete = (current: ClientSettings) => ({ ...current, onboardingCompletedAt });
+
+  it("adopts another pane's completed setup without replacing this pane's preferences", () => {
+    __setClientSettingsForTests(savedSettings);
+    applySharedOnboardingCompletion({ ...DEFAULT_CLIENT_SETTINGS, onboardingCompletedAt });
+    expect(getClientSettings()).toEqual({ ...savedSettings, onboardingCompletedAt });
+    applySharedOnboardingCompletion(DEFAULT_CLIENT_SETTINGS);
+    expect(getClientSettings().onboardingCompletedAt).toBe(onboardingCompletedAt);
+  });
 
   it("rejects completion after a failed read and preserves saved preferences on retry", async () => {
     const failure = new Error("storage unavailable");

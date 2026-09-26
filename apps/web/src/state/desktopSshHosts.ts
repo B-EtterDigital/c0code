@@ -46,7 +46,9 @@ class DesktopSshDiscoveryError extends Schema.TaggedError<DesktopSshDiscoveryErr
 }
 
 function getDesktopSshDiscoveryBridge(): DesktopSshDiscoveryBridge | undefined {
-  return typeof window === "undefined" ? undefined : window.desktopBridge;
+  return typeof window === "undefined"
+    ? undefined
+    : (window.c0codeConnectionBridge ?? window.desktopBridge);
 }
 
 export function createDesktopSshHostsStateAtom(

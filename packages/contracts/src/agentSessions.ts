@@ -3,7 +3,7 @@ import { IsoDateTime, NonNegativeInt, ProjectId, TrimmedNonEmptyString } from ".
 import { ProviderInstanceId } from "./providerInstance.ts";
 
 /** Coding agent home directories the scanner knows how to read. */
-export const AgentSessionSource = Schema.Literals(["claudeAgent", "codex"]);
+export const AgentSessionSource = Schema.Literals(["claudeAgent", "codex", "opencode"]);
 export type AgentSessionSource = typeof AgentSessionSource.Type;
 
 /** File identity saved with an imported session so bounded retries can skip unchanged history. */
@@ -29,7 +29,11 @@ export function isImportedAgentSessionMessageId(messageId: string): boolean {
  * Empty for now. Kept as a struct so future scan options (source filters,
  * explicit roots) can be added without a new method.
  */
-export const AgentSessionScanInput = Schema.Struct({});
+export const AgentSessionScanInput = Schema.Struct({
+  roots: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
+  depth: Schema.optional(Schema.Literals([1, 2, 3])),
+  includeHistory: Schema.optional(Schema.Boolean),
+});
 export type AgentSessionScanInput = typeof AgentSessionScanInput.Type;
 
 /**
@@ -76,6 +80,7 @@ export type AgentSessionScanResult = typeof AgentSessionScanResult.Type;
 export const AgentSessionImportInput = Schema.Struct({
   projectId: ProjectId,
   expectedWorkspaceRoot: Schema.optional(TrimmedNonEmptyString),
+  openCodeSessionId: Schema.optional(TrimmedNonEmptyString),
 });
 export type AgentSessionImportInput = typeof AgentSessionImportInput.Type;
 

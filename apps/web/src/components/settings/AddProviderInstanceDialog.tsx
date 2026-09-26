@@ -33,6 +33,7 @@ import { WizardPanel } from "../ui/wizard";
 import {
   ADD_PROVIDER_WIZARD_STEPS,
   resolveWizardNavigation,
+  withIsolatedCodexHome,
   type WizardNavigation,
 } from "./AddProviderInstanceDialog.logic";
 import { AddProviderInstanceWizardSteps } from "./AddProviderInstanceWizardSteps";
@@ -191,7 +192,7 @@ export function AddProviderInstanceDialog({
     setHasAttemptedSubmit(true);
     if (instanceIdError !== null) return;
 
-    const config = configByDriver[driver] ?? {};
+    const config = withIsolatedCodexHome(driver, instanceId, configByDriver[driver] ?? {});
     const hasConfig = Object.keys(config).length > 0;
     const normalizedAccentColor = normalizeProviderAccentColor(accentColor);
 

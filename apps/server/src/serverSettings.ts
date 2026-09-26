@@ -27,6 +27,7 @@ import {
   type ServerSettingsPatch,
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
+import * as NodeOS from "node:os";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -54,6 +55,7 @@ import {
   isModelSelectionProviderEnabled,
 } from "@t3tools/shared/serverSettings";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import { expandHomePath } from "./pathExpansion.ts";
 
 export { resolveSourceControlWriterModelSelection } from "@t3tools/shared/serverSettings";
 
@@ -413,6 +415,68 @@ const make = Effect.gen(function* () {
   const startedDeferred = yield* Deferred.make<void, ServerSettingsError>();
   const watcherScope = yield* Scope.make("sequential");
   yield* Effect.addFinalizer(() => Scope.close(watcherScope, Exit.void));
+
+  const codexCredentialHome = (instance: ProviderInstanceConfig): string | null => {
+    if (instance.driver !== ProviderDriverKind.make("codex")) return null;
+    const config = instance.config as Record<string, unknown>;
+    const shadowHome = typeof config.shadowHomePath === "string" ? config.shadowHomePath.trim() : "";
+    const directHome = typeof config.homePath === "string" ? config.homePath.trim() : "";
+    return pathService.resolve(
+      expandHomePath(shadowHome || directHome || pathService.join(NodeOS.homedir(), ".codex")),
+    );
+  };
+
+  // Resolve the nearest existing ancestor so aliases through a symlinked parent
+  // are rejected even before the account directory itself has been created.
+  const canonicalCodexHome = Effect.fnUntraced(function* (configuredPath: string) {
+    let cursor = configuredPath;
+    const missingSegments: string[] = [];
+    while (true) {
+      const realPath = yield* fs.realPath(cursor).pipe(
+        Effect.match({ onFailure: () => null, onSuccess: (value) => value }),
+      );
+      if (realPath !== null) {
+        return pathService.resolve(realPath, ...missingSegments.toReversed());
+      }
+      const parent = pathService.dirname(cursor);
+      if (parent === cursor) return configuredPath;
+      missingSegments.push(pathService.basename(cursor));
+      cursor = parent;
+    }
+  });
+
+  const validateCodexHomeIsolation = Effect.fnUntraced(function* (
+    current: ServerSettings,
+    next: ServerSettings,
+  ) {
+    const homes: Array<{ id: string; configured: string; canonical: string; changed: boolean }> = [];
+    for (const [id, instance] of Object.entries(next.providerInstances)) {
+      const configured = codexCredentialHome(instance);
+      if (configured === null) continue;
+      const previous = current.providerInstances[ProviderInstanceId.make(id)];
+      homes.push({
+        id,
+        configured,
+        canonical: yield* canonicalCodexHome(configured),
+        changed: previous === undefined || codexCredentialHome(previous) !== configured,
+      });
+    }
+    for (let left = 0; left < homes.length; left += 1) {
+      for (let right = left + 1; right < homes.length; right += 1) {
+        const first = homes[left]!;
+        const second = homes[right]!;
+        if (first.canonical !== second.canonical || (!first.changed && !second.changed)) continue;
+        return yield* new ServerSettingsError({
+          settingsPath,
+          operation: "normalize",
+          providerInstanceId: first.changed ? first.id : second.id,
+          cause: new Error(
+            `Codex provider instances '${first.id}' and '${second.id}' resolve to the same credential home.`,
+          ),
+        });
+      }
+    }
+  });
 
   const emitChange = (settings: ServerSettings) =>
     PubSub.publish(changesPubSub, settings).pipe(Effect.asVoid);
@@ -841,9 +905,13 @@ const make = Effect.gen(function* () {
       writeSemaphore.withPermits(1)(
         Effect.gen(function* () {
           const current = yield* getSettingsFromCache;
+          const normalizedPatch = yield* normalizeServerSettings(
+            applyServerSettingsPatch(current, patch),
+          );
+          yield* validateCodexHomeIsolation(current, normalizedPatch);
           const nextPersisted = yield* persistProviderEnvironmentSecrets(
             current,
-            applyServerSettingsPatch(current, patch),
+            normalizedPatch,
           );
           const next = yield* normalizeServerSettings(nextPersisted);
           yield* writeSettingsAtomically(next);

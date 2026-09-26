@@ -28,6 +28,7 @@ import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEng
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as ProviderSessionDirectory from "../provider/Services/ProviderSessionDirectory.ts";
 import * as AgentSessionScanner from "./AgentSessionScanner.ts";
+import { readOpenCodeSession } from "./OpenCodeSessionImport.ts";
 
 const CLAUDE_SESSION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -128,7 +129,7 @@ export const importRecentAgentThreads = Effect.fn("importRecentAgentThreads")(fu
     .pipe(
       Effect.mapError((cause) => new AgentSessionScanError({ operation: "read-projects", cause })),
     );
-  const threads = scanner.recentThreads(
+  const threads = input.openCodeSessionId ? Stream.fromEffect(readOpenCodeSession(input.openCodeSessionId, workspaceRoot)) : scanner.recentThreads(
     workspaceRoot,
     completedSources.map((entry) => entry.source),
   );
@@ -231,7 +232,9 @@ export const importRecentAgentThreads = Effect.fn("importRecentAgentThreads")(fu
               status: "stopped",
               runtimeMode: DEFAULT_RUNTIME_MODE,
               resumeCursor:
-                thread.source === "codex"
+                thread.source === "opencode"
+                  ? { schemaVersion: 1, sessionId: thread.providerSessionId }
+                  : thread.source === "codex"
                   ? { threadId: thread.providerSessionId }
                   : { threadId, resume: thread.providerSessionId },
               runtimePayload: { cwd: workspaceRoot },

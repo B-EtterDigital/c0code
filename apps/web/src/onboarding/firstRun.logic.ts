@@ -8,6 +8,7 @@ export interface FirstRunGateState {
 }
 
 type FirstRunGateEvent =
+  | { readonly type: "completed" }
   | { readonly type: "evidence"; readonly decision: FirstRunDecision }
   | { readonly type: "timeout" };
 
@@ -69,6 +70,9 @@ export function transitionFirstRunGateState(
   state: FirstRunGateState,
   event: FirstRunGateEvent,
 ): FirstRunGateState {
+  if (event.type === "completed") {
+    return state.decision === "app" ? state : { decision: "app", stalled: false };
+  }
   if (event.type === "timeout") {
     return state.decision === "pending" && !state.stalled ? { ...state, stalled: true } : state;
   }

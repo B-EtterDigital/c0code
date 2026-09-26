@@ -1,4 +1,4 @@
-import { useC0xShellConfig } from "~/c0x/nativeShell";
+import "~/c0x/nativeShell";
 import {
   type AssistantCitation,
   type EnvironmentId,
@@ -85,6 +85,7 @@ import {
   BrainIcon,
   CheckIcon,
   ChevronDownIcon,
+  ChevronsDownIcon,
   ChevronRightIcon,
   ChevronUpIcon,
   CircleAlertIcon,
@@ -352,6 +353,7 @@ interface MessagesTimelineProps {
   onContentOverflowChange?: (overflows: boolean) => void;
   onToolOutputCollapsedAtEnd?: () => void;
   onManualNavigation: () => void;
+  onJumpToEnd?: (() => void) | undefined;
   hideEmptyPlaceholder?: boolean;
   topFadeEnabled?: boolean;
   /** Non-null when older turns exist beyond the loaded window. */
@@ -400,11 +402,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onContentOverflowChange,
   onToolOutputCollapsedAtEnd,
   onManualNavigation,
+  onJumpToEnd,
   hideEmptyPlaceholder = false,
   topFadeEnabled = false,
   loadEarlier = null,
 }: MessagesTimelineProps) {
-  const c0xNavigation = useC0xShellConfig().modules.length > 0;
+  const c0xNavigation = typeof window !== "undefined" && window.__c0xNativeBuild === true;
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
   const citationThreadRef = useMemo(() => parseScopedThreadKey(routeThreadKey), [routeThreadKey]);
   const expandCitedTurn = useCallback((turnId: TurnId) => {
@@ -887,6 +890,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           />
           <TimelineMinimap
             alwaysVisible={c0xNavigation}
+            onJumpToEnd={onJumpToEnd}
             items={minimapItems}
             hasPersistentGutter={minimapHasPersistentGutter}
             hitStripWidth={minimapHitStripWidth}
@@ -990,6 +994,7 @@ function timelineMinimapEventTargetsPreview(target: EventTarget): boolean {
 }
 
 function TimelineMinimap({
+  onJumpToEnd,
   alwaysVisible = false,
   hasPersistentGutter,
   hitStripWidth,
@@ -999,6 +1004,7 @@ function TimelineMinimap({
   onSelect,
 }: {
   alwaysVisible?: boolean;
+  onJumpToEnd?: (() => void) | undefined;
   hasPersistentGutter: boolean;
   hitStripWidth: number;
   currentIndex: number | null;
@@ -1176,7 +1182,7 @@ function TimelineMinimap({
             })}
             {activeItem ? (
               <span
-                className="pointer-events-auto absolute left-8 w-80 cursor-text select-text"
+                className="pointer-events-auto absolute left-8 w-80 max-w-[calc(100vw-4rem)] cursor-text select-text"
                 data-minimap-preview
                 onMouseMove={(event) => event.stopPropagation()}
                 style={{
@@ -1211,6 +1217,11 @@ function TimelineMinimap({
               if (nextItem) onSelect(nextItem);
             }}
           />
+          {onJumpToEnd ? <Button type="button" size="icon-micro" variant="ghost-muted"
+            aria-label="Jump to latest message" title="Jump to latest message"
+            data-testid="timeline-jump-to-latest"
+            className="pointer-events-auto absolute left-1 top-[calc(100%+24px)] -translate-x-1/2"
+            onClick={onJumpToEnd}><ChevronsDownIcon className="size-4" /></Button> : null}
         </div>
       </div>
     </div>

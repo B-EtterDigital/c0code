@@ -43,6 +43,7 @@ export type ComposerProviderState = {
 };
 
 type TraitsRenderInput = {
+  onOpenModelPicker?: () => void;
   provider: ProviderDriverKind;
   instanceId?: ProviderInstanceId;
   threadRef?: ScopedThreadRef;
@@ -181,6 +182,7 @@ function renderTraitsControl(
     triggerVariant,
     triggerClassName,
     isComposerOwned,
+    onOpenModelPicker,
   } = input;
   const hasTarget = threadRef !== undefined || draftId !== undefined;
   const { selections: resolvedModelOptions } = resolveComposerOptionSelections(
@@ -206,6 +208,7 @@ function renderTraitsControl(
   return (
     <Component
       provider={provider}
+      {...(onOpenModelPicker ? { onOpenModelPicker } : {})}
       {...(instanceId ? { instanceId } : {})}
       models={models}
       {...(threadRef ? { threadRef } : {})}

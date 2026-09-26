@@ -23,6 +23,17 @@ const freshWorkspace = {
   threadCount: 1,
 } as const;
 
+describe("finishing onboarding", () => {
+  it("keeps the wizard during partial import but releases it after saved completion", () => {
+    const wizard = { decision: "wizard", stalled: false } as const;
+    expect(transitionFirstRunGateState(wizard, { type: "evidence", decision: "app" })).toBe(wizard);
+    const completed = transitionFirstRunGateState(wizard, { type: "completed" });
+    expect(completed).toEqual({ decision: "app", stalled: false });
+    expect(transitionFirstRunGateState(completed, { type: "evidence", decision: "pending" })).toBe(completed);
+    expect(resolveFirstRunDecision({ ...freshWorkspace, completed: true })).toEqual({ decision: "app", persistCompletion: false });
+  });
+});
+
 describe("resolveFirstRunDecision", () => {
   it("opens the wizard for an authoritative fresh workspace", () => {
     expect(resolveFirstRunDecision(freshWorkspace)).toEqual({

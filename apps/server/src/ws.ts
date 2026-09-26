@@ -17,6 +17,7 @@ import * as Stream from "effect/Stream";
 import {
   DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL,
   AuthAccessStreamError,
+  AgentSessionScanError,
   type AuthAccessStreamEvent,
   type AuthEnvironmentScope,
   AuthSessionId,
@@ -127,6 +128,7 @@ import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
+import { scanProjectFolders } from "./project/ProjectFolderScanner.ts";
 import { importRecentAgentThreads } from "./project/AgentSessionImporter.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
@@ -2362,8 +2364,14 @@ const makeWsRpcLayer = (
             deletePendingAttachment(input.attachmentId),
             { "rpc.aggregate": "workspace" },
           ),
-        [WS_METHODS.agentSessionsScan]: () =>
-          observeRpcEffect(WS_METHODS.agentSessionsScan, agentSessionScanner.scan, {
+        [WS_METHODS.agentSessionsScan]: (input) =>
+          observeRpcEffect(WS_METHODS.agentSessionsScan, input.roots === undefined ? agentSessionScanner.scan : Effect.gen(function* () {
+            const history = input.includeHistory ? (yield* agentSessionScanner.scan).candidates : [];
+            return yield* Effect.tryPromise({
+              try: () => scanProjectFolders(input, history),
+              catch: (cause) => new AgentSessionScanError({ operation: "read-projects", cause }),
+            });
+          }), {
             "rpc.aggregate": "workspace",
           }),
         [WS_METHODS.agentSessionsImport]: (input) =>

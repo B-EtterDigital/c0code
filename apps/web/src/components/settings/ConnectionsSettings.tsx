@@ -1773,6 +1773,7 @@ function CloudRemoteEnvironmentRows({
 
 export function ConnectionsSettings() {
   const desktopBridge = window.desktopBridge;
+  const connectionBridge = window.c0codeConnectionBridge ?? desktopBridge;
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { environments } = useEnvironments();
   const primaryEnvironment = usePrimaryEnvironment();
@@ -1910,7 +1911,7 @@ export function ConnectionsSettings() {
     canManageLocalBackend && desktopBridge ? desktopNetworkAccessStateAtom : null,
   );
   const isSshDiscoveryActive =
-    desktopBridge !== undefined && addBackendDialogOpen && savedBackendMode === "ssh";
+    connectionBridge !== undefined && addBackendDialogOpen && savedBackendMode === "ssh";
   const desktopSshHosts = useEnvironmentQuery(
     isSshDiscoveryActive ? desktopSshHostsStateAtom : null,
   );
@@ -1945,7 +1946,7 @@ export function ConnectionsSettings() {
   const isLoadingDiscoveredSshHosts = desktopSshHosts.isPending && desktopSshHosts.data === null;
   const discoveredSshHostsError = desktopSshHosts.error;
   const hasSshHostSuggestionContent =
-    desktopBridge !== undefined &&
+    connectionBridge !== undefined &&
     (isLoadingDiscoveredSshHosts || unsavedDiscoveredSshHosts.length > 0);
   const desktopServerExposureState = desktopNetworkAccess.data?.serverExposureState ?? null;
   const desktopAdvertisedEndpoints =
@@ -2295,14 +2296,14 @@ export function ConnectionsSettings() {
   // Resolves a picked alias before connecting it through the manual SSH flow.
   const handleSelectSshHostSuggestion = useCallback(
     async (target: DesktopDiscoveredSshHost) => {
-      if (isAddingSavedBackend || !desktopBridge) return;
+      if (isAddingSavedBackend || !connectionBridge) return;
 
       setIsAddingSavedBackend(true);
       setSavedBackendError(null);
       setSavedBackendSshHost(target.alias);
       let resolved: DesktopSshEnvironmentTarget;
       try {
-        resolved = await desktopBridge.resolveSshHost(target.alias);
+        resolved = await connectionBridge.resolveSshHost(target.alias);
       } catch (error) {
         setSavedBackendError(formatDesktopSshConnectionError(error));
         setIsAddingSavedBackend(false);
@@ -2312,7 +2313,7 @@ export function ConnectionsSettings() {
       setSavedBackendSshPort(resolved.port === null ? "" : String(resolved.port));
       await connectSavedBackendSshTarget(resolved);
     },
-    [connectSavedBackendSshTarget, desktopBridge, isAddingSavedBackend],
+    [connectSavedBackendSshTarget, connectionBridge, isAddingSavedBackend],
   );
 
   const handleSavedBackendSshHostKeyDown = useCallback(
@@ -3564,7 +3565,7 @@ export function ConnectionsSettings() {
                       description: "Enter a backend host and pairing code.",
                       icon: <ChevronsLeftRightEllipsisIcon aria-hidden className="size-4" />,
                     })}
-                    {desktopBridge
+                    {connectionBridge
                       ? renderConnectionModeCard({
                           mode: "ssh",
                           title: "SSH",

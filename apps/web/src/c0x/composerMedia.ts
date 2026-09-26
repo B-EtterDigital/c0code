@@ -1,3 +1,4 @@
+import { randomUUID } from "../lib/utils";
 import { useCallback, useEffect, useState } from "react";
 import type {
   C0xComposerMediaState,
@@ -43,7 +44,7 @@ export function useC0xComposerMedia(targetKey: string) {
   const [snapshot, setSnapshot] = useState<{ targetKey: string; state: C0xComposerMediaState } | null>(null);
   const request = useCallback((action: C0xComposerMediaRequest["action"], preferences?: Partial<C0xMediaPreferences>) => {
     if (!enabled) return;
-    postC0xShellEvent({ type: "composer-media", action, targetKey, requestId: crypto.randomUUID(),
+    postC0xShellEvent({ type: "composer-media", action, targetKey, requestId: randomUUID(),
       ...(preferences ? { preferences } : {}),
     });
   }, [enabled, targetKey]);

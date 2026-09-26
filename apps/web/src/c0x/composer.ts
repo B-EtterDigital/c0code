@@ -1,3 +1,4 @@
+import { randomUUID } from "../lib/utils";
 import { useEffect } from "react";
 import { composerTargetKey, hydrateImagesFromPersisted, useComposerDraftStore, type ComposerThreadTarget } from "~/composerDraftStore";
 import { recordC0xComposerMedia } from './composerMediaReceipts';
@@ -36,7 +37,7 @@ export function registerC0xComposer(target: ComposerThreadTarget, focus: () => v
         if (!image.mimeType.startsWith("image/") || !image.dataUrl.startsWith("data:image/")) return "invalid-data-url";
         const store = useComposerDraftStore.getState();
         if (store.getComposerDraft(target)?.images.some((existing) => existing.previewUrl === image.dataUrl)) return "already-present";
-        const id = crypto.randomUUID();
+        const id = randomUUID();
         const hydrated = hydrateImagesFromPersisted([{ ...image, id }]);
         if (hydrated.length !== 1) return "invalid-data-url";
         store.addImages(target, hydrated);

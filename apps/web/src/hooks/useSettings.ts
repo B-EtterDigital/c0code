@@ -47,6 +47,7 @@ import { primaryServerSettingsAtom, serverEnvironment } from "~/state/server";
 import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useTheme } from "./useTheme";
+import { CLIENT_SETTINGS_STORAGE_KEY, readBrowserClientSettings } from "../clientPersistenceStorage";
 
 const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";
 
@@ -81,6 +82,18 @@ function getClientSettingsSnapshot(): ClientSettings {
 function replaceClientSettingsSnapshot(settings: ClientSettings): void {
   clientSettingsSnapshot = settings;
   emitClientSettingsChange();
+}
+
+/** Sibling C0CODE panes share storage but keep separate React snapshots. */
+export function applySharedOnboardingCompletion(settings: ClientSettings | null): void {
+  if (!settings?.onboardingCompletedAt || settings.onboardingCompletedAt === clientSettingsSnapshot.onboardingCompletedAt) return;
+  replaceClientSettingsSnapshot({ ...clientSettingsSnapshot, onboardingCompletedAt: settings.onboardingCompletedAt });
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === CLIENT_SETTINGS_STORAGE_KEY) applySharedOnboardingCompletion(readBrowserClientSettings());
+  });
 }
 
 function setClientSettingsHydrationStatus(nextStatus: ClientSettingsHydrationStatus): void {
@@ -161,8 +174,13 @@ async function hydrateClientSettings(): Promise<void> {
   return clientSettingsHydrationPromise;
 }
 
-const defaultClientSettingsPersistence = (settings: ClientSettings): Promise<void> =>
-  ensureLocalApi().persistence.setClientSettings(settings);
+const defaultClientSettingsPersistence = (settings: ClientSettings): Promise<void> => {
+  // A late preference write from another pane must not erase completed setup.
+  const saved = readBrowserClientSettings();
+  const next = settings.onboardingCompletedAt || !saved?.onboardingCompletedAt
+    ? settings : { ...settings, onboardingCompletedAt: saved.onboardingCompletedAt };
+  return ensureLocalApi().persistence.setClientSettings(next);
+};
 
 function enqueueClientSettingsPersistence<A>(work: () => Promise<A>): Promise<A> {
   const result = clientSettingsPersistenceQueue.then(work);
