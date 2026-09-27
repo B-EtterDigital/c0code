@@ -1615,19 +1615,40 @@ body {
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    black min(1.5rem, var(--scroll-area-overflow-y-start)),
-    black calc(100% - min(1.5rem, var(--scroll-area-overflow-y-end))),
+    black min(var(--fade-size), var(--scroll-area-overflow-y-start)),
+    black calc(100% - min(var(--fade-size), var(--scroll-area-overflow-y-end))),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    black min(1.5rem, var(--scroll-area-overflow-y-start)),
-    black calc(100% - min(1.5rem, var(--scroll-area-overflow-y-end))),
+    black min(var(--fade-size), var(--scroll-area-overflow-y-start)),
+    black calc(100% - min(var(--fade-size), var(--scroll-area-overflow-y-end))),
     transparent 100%
   );
   -webkit-mask-composite: source-over;
   mask-composite: add;
+}
+
+/* Horizontal-only viewports keep their edge cues with the same single-mask path. */
+.electron-linux
+  [data-slot="scroll-area-viewport"][data-scroll-fade][data-has-overflow-x]:not(
+    [data-has-overflow-y]
+  ) {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black min(var(--fade-size), var(--scroll-area-overflow-x-start)),
+    black calc(100% - min(var(--fade-size), var(--scroll-area-overflow-x-end))),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black min(var(--fade-size), var(--scroll-area-overflow-x-start)),
+    black calc(100% - min(var(--fade-size), var(--scroll-area-overflow-x-end))),
+    transparent 100%
+  );
 }
 
 /* App-chrome grain. Baked into each surface's own background (behind
