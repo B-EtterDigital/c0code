@@ -1,3 +1,16 @@
+import {
+  C0xSidebarFolder,
+  groupC0xSidebarRows,
+  groupC0xSidebarSections,
+  useC0xCollapsedFolders,
+} from "../c0x/sidebarFolders";
+import {
+  C0xSidebarLifecycle,
+  C0xSidebarSplitCount,
+  openC0xProjectPicker,
+  useC0xSidebar,
+  emitC0xSidebarEvent,
+} from "../c0x/sidebar";
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
@@ -1542,6 +1555,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
             {draftIndicator}
             {title}
             {pinIndicator}
+            <C0xSidebarSplitCount threadId={thread.id} title={thread.title} />
             {terminalStatusIcon}
             {isRegeneratingTitle ? (
               <span role="status" className="sr-only">
@@ -1699,6 +1713,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 <span className="flex-1" />
               )}
               {pinIndicator}
+              <C0xSidebarSplitCount threadId={thread.id} title={thread.title} />
               {/* The visible state owns this slot's width: status at rest,
                   actions on hover/keyboard focus or while the popover is open. Keeping
                   the hidden state out of flow lets the project label reclaim
@@ -2103,10 +2118,9 @@ export default function Sidebar() {
     },
   });
   const newThreadContext = useHandleNewThread();
-  const openAddProjectCommandPalette = useCallback(
-    () => openCommandPalette({ open: "add-project" }),
-    [],
-  );
+  const openAddProjectCommandPalette = useCallback(() => {
+    if (!openC0xProjectPicker()) openCommandPalette({ open: "add-project" });
+  }, []);
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
@@ -2624,16 +2638,63 @@ export default function Sidebar() {
     return routeThread === undefined ? EMPTY_THREADS : [routeThread];
   }, [routeThreadKey, snoozedShelfExpanded, snoozedThreads]);
 
-  const orderedThreads = useMemo(
-    () => [...pinnedThreads, ...activeThreads, ...visibleSnoozedThreads, ...renderedSettledThreads],
-    [pinnedThreads, activeThreads, visibleSnoozedThreads, renderedSettledThreads],
+  const c0xSidebarState = useC0xSidebar();
+  const c0xFoldersEnabled =
+    typeof window !== "undefined" && window.__c0xSidebar === c0xSidebarState;
+  const c0xCollapsedFolders = useC0xCollapsedFolders();
+  const c0xProjectGroupByPhysicalKey = useMemo(
+    () =>
+      new Map(
+        projectGroups.flatMap((group) =>
+          group.memberProjects.map(
+            (project) => [`${project.environmentId}:${project.id}`, group] as const,
+          ),
+        ),
+      ),
+    [projectGroups],
   );
+  const c0xProjectKey = useCallback(
+    (thread: EnvironmentThreadShell) =>
+      c0xProjectGroupByPhysicalKey.get(`${thread.environmentId}:${thread.projectId}`)?.projectKey ??
+      "",
+    [c0xProjectGroupByPhysicalKey],
+  );
+  const c0xProjectOrder = useMemo(
+    () => projectGroups.map((group) => group.projectKey),
+    [projectGroups],
+  );
+  const orderedThreads = useMemo(
+    () =>
+      [pinnedThreads, activeThreads, visibleSnoozedThreads, renderedSettledThreads].flatMap(
+        (section) =>
+          c0xFoldersEnabled
+            ? groupC0xSidebarRows(section, c0xProjectKey, c0xProjectOrder)
+            : section,
+      ),
+    [
+      pinnedThreads,
+      activeThreads,
+      visibleSnoozedThreads,
+      renderedSettledThreads,
+      c0xFoldersEnabled,
+      c0xProjectKey,
+      c0xProjectOrder,
+    ],
+  );
+  const c0xFolderCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const thread of orderedThreads) {
+      const key = c0xProjectKey(thread);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [orderedThreads, c0xProjectKey]);
   const orderedThreadKeys = useMemo(
     () =>
-      orderedThreads.map((thread) =>
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      ),
-    [orderedThreads],
+      orderedThreads
+        .filter((thread) => !c0xFoldersEnabled || !c0xCollapsedFolders[c0xProjectKey(thread)])
+        .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
+    [orderedThreads, c0xFoldersEnabled, c0xCollapsedFolders, c0xProjectKey],
   );
   // Rows call back into the click handler without carrying the ordered list as
   // a prop — a fresh array identity per shell update would defeat every row's
@@ -2707,6 +2768,14 @@ export default function Sidebar() {
       if (isMobile) {
         setOpenMobile(false);
       }
+      if (
+        emitC0xSidebarEvent({
+          type: "session-select",
+          threadId: threadRef.threadId,
+          route: `/${encodeURIComponent(threadRef.environmentId)}/${encodeURIComponent(threadRef.threadId)}`,
+        })
+      )
+        return;
       void router.navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(threadRef),
@@ -3157,7 +3226,7 @@ export default function Sidebar() {
   );
   // Include every visible row in the measured order. Older servers disable
   // pickup on their rows without changing where those rows render.
-  const sidebarListItems = useMemo((): readonly SidebarListItem[] => {
+  const baseSidebarListItems = useMemo((): readonly SidebarListItem[] => {
     const rowsOf = (
       list: readonly EnvironmentThreadShell[],
       section: SidebarSection,
@@ -3199,6 +3268,30 @@ export default function Sidebar() {
     snoozedThreads.length,
     visibleSnoozedThreads,
   ]);
+  const c0xItemProjectKey = useCallback(
+    (item: SidebarListItem) => {
+      if (item.kind !== "thread") return "";
+      const thread = threadByKey.get(item.key);
+      return thread ? c0xProjectKey(thread) : "";
+    },
+    [threadByKey, c0xProjectKey],
+  );
+  const c0xGroupedListItems = useMemo(
+    () =>
+      c0xFoldersEnabled
+        ? groupC0xSidebarSections(baseSidebarListItems, c0xItemProjectKey, c0xProjectOrder)
+        : baseSidebarListItems,
+    [baseSidebarListItems, c0xFoldersEnabled, c0xItemProjectKey, c0xProjectOrder],
+  );
+  const sidebarListItems = useMemo(
+    () =>
+      c0xFoldersEnabled
+        ? c0xGroupedListItems.filter(
+            (item) => item.kind !== "thread" || !c0xCollapsedFolders[c0xItemProjectKey(item)],
+          )
+        : c0xGroupedListItems,
+    [c0xGroupedListItems, c0xFoldersEnabled, c0xCollapsedFolders, c0xItemProjectKey],
+  );
   useEffect(() => {
     if (
       dragState !== null &&
@@ -4146,6 +4239,7 @@ export default function Sidebar() {
   // for multi-project setups.
   const handleNewThreadClick = useCallback(
     (event?: ReactMouseEvent) => {
+      if (openC0xProjectPicker()) return;
       // One project: nothing to pick, create immediately. Shift+click creates
       // directly in the current project even with several projects, skipping
       // the palette picker.
@@ -4179,6 +4273,7 @@ export default function Sidebar() {
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
   return (
     <>
+      <C0xSidebarLifecycle />
       <SidebarChromeHeader isElectron={isElectron} />
       <SidebarContent
         className="gap-0"
@@ -4635,21 +4730,43 @@ export default function Sidebar() {
                         );
                       };
                       const from = dragState?.activeSection ?? null;
-                      const items: ReactNode[] = [
-                        <SidebarDraftBlock
-                          key="draft-sessions"
-                          projectByKey={projectByKey}
-                          projectDisplayNameByKey={projectDisplayNameByKey}
-                          scopedProjectKeys={scopedProjectKeys}
-                          routeDraftId={routeDraftIdForRows}
-                          onNavigateToDraft={navigateToDraft}
-                        />,
-                      ];
-                      for (const item of sidebarListItems) {
+                      // C0CODE lists sessions only after their first sent message.
+                      // Keep unsent drafts in the composer store, without sidebar rows.
+                      const items: ReactNode[] = c0xFoldersEnabled
+                        ? []
+                        : [
+                            <SidebarDraftBlock
+                              key="draft-sessions"
+                              projectByKey={projectByKey}
+                              projectDisplayNameByKey={projectDisplayNameByKey}
+                              scopedProjectKeys={scopedProjectKeys}
+                              routeDraftId={routeDraftIdForRows}
+                              onNavigateToDraft={navigateToDraft}
+                            />,
+                          ];
+                      let folderKey: string | null = null;
+                      for (const item of c0xGroupedListItems) {
                         if (item.kind === "thread") {
-                          items.push(renderThreadRow(threadByKey.get(item.key)!, item.section));
+                          const thread = threadByKey.get(item.key)!;
+                          const projectKey = c0xProjectKey(thread);
+                          if (c0xFoldersEnabled && projectKey !== folderKey) {
+                            folderKey = projectKey;
+                            const project = projectGroupByScopeKey.get(projectKey);
+                            if (project)
+                              items.push(
+                                <C0xSidebarFolder
+                                  key={`folder:${item.section}:${projectKey}`}
+                                  project={project}
+                                  count={c0xFolderCounts.get(projectKey) ?? 0}
+                                  isCollapsed={c0xCollapsedFolders[projectKey] === true}
+                                />,
+                              );
+                          }
+                          if (!c0xFoldersEnabled || !c0xCollapsedFolders[projectKey])
+                            items.push(renderThreadRow(thread, item.section));
                           continue;
                         }
+                        folderKey = null;
                         switch (item.marker) {
                           case "pinned-header":
                             items.push(

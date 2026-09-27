@@ -1498,10 +1498,14 @@ function OpenCommandPaletteDialog(props: {
   }, [clearOpenIntent, openAddProjectFlow, openIntent]);
 
   useLayoutEffect(() => {
-    if (openIntent?.kind !== "new-thread-in" || projectThreadItems.length === 0) {
+    if (openIntent?.kind !== "new-thread-in") {
       return;
     }
     clearOpenIntent();
+    if (projectThreadItems.length === 0) {
+      openAddProjectFlow();
+      return;
+    }
     browseNavigation.invalidate();
     setAddProjectCloneFlow(null);
     setViewStack([]);
@@ -1524,6 +1528,23 @@ function OpenCommandPaletteDialog(props: {
           label: "Projects",
           items: enumerateCommandPaletteItems(prioritized),
         },
+        {
+          value: "choose-another-project",
+          label: "Add project",
+          items: [
+            {
+              kind: "action",
+              value: "choose-another-folder",
+              searchTerms: ["new", "project", "folder", "directory", "browse"],
+              title: "Choose another folder…",
+              icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+              keepOpen: true,
+              run: async () => {
+                openAddProjectFlow();
+              },
+            },
+          ],
+        },
       ],
     });
   }, [
@@ -1534,6 +1555,7 @@ function OpenCommandPaletteDialog(props: {
     openIntent,
     projectThreadItems,
     pushPaletteView,
+    openAddProjectFlow,
   ]);
 
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
