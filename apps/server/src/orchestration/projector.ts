@@ -48,13 +48,15 @@ function retainThreadActivities(activities: OrchestrationThread["activities"]) {
   const recentStart = activities.length - 500;
   if (recentStart <= 0) return activities;
   const pending = new Map<string, OrchestrationThread["activities"][number]>();
+  const resolved = new Set<string>();
   for (const activity of activities) {
     if (!Predicate.isObject(activity.payload)) continue;
     const requestId = activity.payload.requestId;
     if (typeof requestId !== "string") continue;
     if (activity.kind === "user-input.requested" && activity.payload.responseMode === "message") {
-      pending.set(requestId, activity);
+      if (!resolved.has(requestId)) pending.set(requestId, activity);
     } else if (activity.kind === "user-input.resolved") {
+      resolved.add(requestId);
       pending.delete(requestId);
     }
   }

@@ -1111,12 +1111,36 @@ describe("OrchestrationEngine", () => {
         if (change === "delete") return;
         const current = (await system.readModel()).threads[0];
         expect(current?.branchPullRequest ?? null).toBeNull();
-        expect(current?.linkedPullRequest ?? null).toEqual(
+        const expectedLink =
           change === "unlink"
             ? null
             : change === "relink"
               ? metadataChanges.relink.linkedPullRequest
-              : previous,
+              : previous;
+        // This fixture has no repository identity, so the legacy single-link
+        // view is absent. The durable multi-link collection must still retain
+        // the user's association and never accept the stale discovery result.
+        expect(current?.linkedPullRequest ?? null).toBeNull();
+        expect(
+          (current?.pullRequests ?? []).map(({ host, repository, number, url, source }) => ({
+            host,
+            repository,
+            number,
+            url,
+            source,
+          })),
+        ).toEqual(
+          expectedLink === null
+            ? []
+            : [
+                {
+                  host: "example.test",
+                  repository: expectedLink.repository,
+                  number: expectedLink.number,
+                  url: expectedLink.url,
+                  source: "manual",
+                },
+              ],
         );
       } finally {
         await system.dispose();

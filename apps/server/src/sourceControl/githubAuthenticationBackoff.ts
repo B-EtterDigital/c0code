@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 
 interface Entry<E> {
-  error?: E;
+  error: E | undefined;
   attempt: number;
   retryAt: number;
   healthy: boolean;
@@ -61,6 +61,7 @@ export function makeGitHubAuthenticationBackoff<E>(isAuthenticationError: (error
             if (oldest !== undefined) entries.delete(oldest);
           }
           entry = {
+            error: undefined,
             attempt: 0,
             retryAt: 0,
             healthy: false,

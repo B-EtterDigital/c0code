@@ -1,5 +1,6 @@
 import {
   type AgentSessionImportSource,
+  ApprovalRequestId,
   ChatAttachment,
   CheckpointRef,
   EventId,
@@ -2963,17 +2964,30 @@ projectionSnapshotLayer("ProjectionSnapshotQuery windowed thread detail", (it) =
         WHERE thread_id = 'thread-w'
       `;
 
+      // Equal timestamps and provider-only sequences cannot reopen a resolved ID.
+      yield* sql`UPDATE projection_thread_activities SET sequence = 17
+        WHERE activity_id = 'user-input-closed'`;
+      for (const requestId of ["input-closed", "input-tied-open"]) {
+        const latest = yield* snapshotQuery.getUserInputActivity({
+          threadId: threadW,
+          requestId: ApprovalRequestId.make(requestId),
+        });
+        assert.equal(Option.getOrThrow(latest).kind, "user-input.resolved");
+      }
+
+      yield* sql`UPDATE projection_thread_activities SET sequence = NULL
+        WHERE activity_id = 'user-input-closed'`;
       const detailWithPinnedRequests = yield* snapshotQuery.getThreadDetailById(threadW);
       assert.equal(detailWithPinnedRequests._tag, "Some");
       if (detailWithPinnedRequests._tag === "Some") {
         const ids = new Set(
           detailWithPinnedRequests.value.activities.map((activity) => activity.id),
         );
-        assert.equal(detailWithPinnedRequests.value.activities.length, 503);
+        assert.equal(detailWithPinnedRequests.value.activities.length, 502);
         assert.equal(ids.has(asEventId("approval-old")), true);
         assert.equal(ids.has(asEventId("user-input-old")), true);
         assert.equal(ids.has(asEventId("user-input-closed")), false);
-        assert.equal(ids.has(asEventId("user-input-tied-z-request")), true);
+        assert.equal(ids.has(asEventId("user-input-tied-z-request")), false);
       }
 
       const windowWithPinnedRequests = yield* snapshotQuery.getThreadDetailSnapshot(threadW, {
@@ -2984,11 +2998,11 @@ projectionSnapshotLayer("ProjectionSnapshotQuery windowed thread detail", (it) =
         const ids = new Set(
           windowWithPinnedRequests.value.thread.activities.map((activity) => activity.id),
         );
-        assert.equal(windowWithPinnedRequests.value.thread.activities.length, 503);
+        assert.equal(windowWithPinnedRequests.value.thread.activities.length, 502);
         assert.equal(ids.has(asEventId("approval-old")), true);
         assert.equal(ids.has(asEventId("user-input-old")), true);
         assert.equal(ids.has(asEventId("user-input-closed")), false);
-        assert.equal(ids.has(asEventId("user-input-tied-z-request")), true);
+        assert.equal(ids.has(asEventId("user-input-tied-z-request")), false);
       }
 
       const fullSnapshot = yield* snapshotQuery.getThreadDetailSnapshot(threadW);

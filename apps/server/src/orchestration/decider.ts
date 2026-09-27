@@ -74,6 +74,7 @@ function isStaleRequestFailureDetail(payload: Record<string, unknown> | null): b
 // while the agent works, so they must not expire with the activity window.
 function openRequests(thread: Pick<OrchestrationThread, "activities">) {
   const requests = new Map<string, OrchestrationThreadActivity>();
+  const closed = new Set<string>();
   for (const activity of thread.activities) {
     const payload =
       typeof activity.payload === "object" && activity.payload !== null
@@ -82,14 +83,16 @@ function openRequests(thread: Pick<OrchestrationThread, "activities">) {
     const requestId = typeof payload?.requestId === "string" ? payload.requestId : null;
     if (requestId === null) continue;
     if (activity.kind === "approval.requested" || activity.kind === "user-input.requested") {
-      requests.set(requestId, activity);
+      if (!closed.has(requestId)) requests.set(requestId, activity);
     } else if (activity.kind === "approval.resolved" || activity.kind === "user-input.resolved") {
+      closed.add(requestId);
       requests.delete(requestId);
     } else if (
       (activity.kind === "provider.approval.respond.failed" ||
         activity.kind === "provider.user-input.respond.failed") &&
       isStaleRequestFailureDetail(payload)
     ) {
+      closed.add(requestId);
       requests.delete(requestId);
     }
   }
@@ -1222,6 +1225,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         threadId: command.threadId,
       });
       const request = userInputActivity;
+      if (request?.kind === "user-input.resolved") {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "This question has already been answered.",
+        });
+      }
       const attachments = Object.values(command.attachmentsByQuestionId ?? {}).flat();
       let questionTextById: Record<string, string> = {};
       if (attachments.length > 0) {
@@ -1232,10 +1241,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         if (Option.isNone(payload)) {
           return yield* new OrchestrationCommandInvariantError({
             commandType: command.type,
-            detail:
-              request?.kind === "user-input.resolved"
-                ? "This question has already been answered."
-                : "This question is no longer pending.",
+            detail: "This question is no longer pending.",
           });
         }
         questionTextById = Object.fromEntries(

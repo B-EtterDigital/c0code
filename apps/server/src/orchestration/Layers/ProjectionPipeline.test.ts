@@ -3076,7 +3076,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
             'User input resolved',
             json_object('requestId', 'user-input-resolved'),
             NULL,
-            '2026-02-26T12:35:04.000Z'
+            '2026-02-26T12:35:03.000Z'
           ),
           (
             'activity-user-input-stale-requested',

@@ -162,6 +162,7 @@ function derivePendingUserInputCountFromActivities(
   activities: ReadonlyArray<ProjectionThreadActivity>,
 ): number {
   const openRequestIds = new Set<string>();
+  const closedRequestIds = new Set<string>();
   const ordered = [...activities].toSorted(
     (left, right) =>
       left.createdAt.localeCompare(right.createdAt) ||
@@ -180,11 +181,12 @@ function derivePendingUserInputCountFromActivities(
     const detail = typeof payload?.detail === "string" ? payload.detail.toLowerCase() : null;
 
     if (activity.kind === "user-input.requested") {
-      openRequestIds.add(requestId);
+      if (!closedRequestIds.has(requestId)) openRequestIds.add(requestId);
       continue;
     }
 
     if (activity.kind === "user-input.resolved") {
+      closedRequestIds.add(requestId);
       openRequestIds.delete(requestId);
       continue;
     }
@@ -197,6 +199,7 @@ function derivePendingUserInputCountFromActivities(
         detail.includes("unknown pending user input request") ||
         detail.includes("unknown pending codex user input request"))
     ) {
+      closedRequestIds.add(requestId);
       openRequestIds.delete(requestId);
     }
   }

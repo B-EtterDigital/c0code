@@ -1861,6 +1861,7 @@ const make = Effect.gen(function* () {
               threadId: thread.id,
             });
           const pendingRequestIds = new Set<string>();
+          const resolvedRequestIds = new Set<string>();
           for (const activity of userInputActivities) {
             const payload =
               typeof activity.payload === "object" && activity.payload !== null
@@ -1873,8 +1874,9 @@ const make = Effect.gen(function* () {
               activity.turnId === turnId &&
               payload?.responseMode !== "message"
             ) {
-              pendingRequestIds.add(requestId);
+              if (!resolvedRequestIds.has(requestId)) pendingRequestIds.add(requestId);
             } else if (activity.kind === "user-input.resolved") {
+              resolvedRequestIds.add(requestId);
               pendingRequestIds.delete(requestId);
             }
           }

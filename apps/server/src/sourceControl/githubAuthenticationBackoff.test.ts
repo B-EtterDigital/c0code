@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
 import * as TestClock from "effect/testing/TestClock";
@@ -8,6 +9,8 @@ import {
   isGitHubAuthenticationFailure,
   makeGitHubAuthenticationBackoff,
 } from "./githubAuthenticationBackoff.ts";
+
+class GitHubTestError extends Data.TaggedError("GitHubTestError")<{ kind: "auth" | "network" }> {}
 
 it("shares a host pause across repositories and separates enterprise hosts", () => {
   assert.equal(
@@ -42,7 +45,7 @@ it("recognizes wrapped authentication failures without hiding other failures", (
   assert.equal(
     isGitHubAuthenticationFailure({
       _tag: "SourceControlProviderError",
-      cause: new Error("network"),
+      cause: new GitHubTestError({ kind: "network" }),
     }),
     false,
   );
@@ -53,9 +56,11 @@ it("recognizes wrapped authentication failures without hiding other failures", (
 
 it.effect("coalesces failed auth probes, backs off, and allows an explicit auth check", () =>
   Effect.gen(function* () {
-    const authError = new Error("unauthenticated");
+    const authError = new GitHubTestError({ kind: "auth" });
     let calls = 0;
-    const backoff = makeGitHubAuthenticationBackoff<Error>((error) => error === authError);
+    const backoff = makeGitHubAuthenticationBackoff<GitHubTestError>(
+      (error) => error === authError,
+    );
     const failed = Effect.suspend(() => {
       calls += 1;
       return Effect.fail(authError);
@@ -82,10 +87,10 @@ it.effect("coalesces failed auth probes, backs off, and allows an explicit auth 
 it.effect("does not pause transient failures or successful reads", () =>
   Effect.gen(function* () {
     let calls = 0;
-    const backoff = makeGitHubAuthenticationBackoff<Error>(() => false);
+    const backoff = makeGitHubAuthenticationBackoff<GitHubTestError>(() => false);
     const failed = Effect.suspend(() => {
       calls += 1;
-      return Effect.fail(new Error("network"));
+      return Effect.fail(new GitHubTestError({ kind: "network" }));
     });
     yield* backoff.protect("github.com", failed).pipe(Effect.exit);
     yield* backoff.protect("github.com", failed).pipe(Effect.exit);
@@ -96,7 +101,7 @@ it.effect("does not pause transient failures or successful reads", () =>
 
 it.effect("keeps authenticated requests concurrent", () =>
   Effect.gen(function* () {
-    const backoff = makeGitHubAuthenticationBackoff<Error>(() => false);
+    const backoff = makeGitHubAuthenticationBackoff<GitHubTestError>(() => false);
     const bothStarted = yield* Deferred.make<void>();
     let started = 0;
     const read = Effect.gen(function* () {
@@ -114,8 +119,10 @@ it.effect("keeps authenticated requests concurrent", () =>
 
 it.effect("an older successful request cannot clear a newer authentication failure", () =>
   Effect.gen(function* () {
-    const authError = new Error("unauthenticated");
-    const backoff = makeGitHubAuthenticationBackoff<Error>((error) => error === authError);
+    const authError = new GitHubTestError({ kind: "auth" });
+    const backoff = makeGitHubAuthenticationBackoff<GitHubTestError>(
+      (error) => error === authError,
+    );
     yield* backoff.protect("github.com", Effect.void);
     const started = yield* Deferred.make<void>();
     const finish = yield* Deferred.make<void>();

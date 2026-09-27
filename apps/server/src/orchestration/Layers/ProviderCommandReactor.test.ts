@@ -3899,34 +3899,38 @@ describe("ProviderCommandReactor", () => {
   });
 
   effectIt.effect.each([
-    { status: "running", reason: "callback" },
-    { status: "stopped", reason: "callback" },
-    { status: "running", reason: "missing" },
-    { status: "running", reason: "closed" },
+    { status: "running", reason: "callback", sequence: undefined },
+    { status: "stopped", reason: "callback", sequence: undefined },
+    { status: "running", reason: "missing", sequence: undefined },
+    { status: "running", reason: "closed", sequence: undefined },
+    { status: "running", reason: "callback", sequence: 17 },
+    { status: "stopped", reason: "callback", sequence: 17 },
+    { status: "running", reason: "missing", sequence: 17 },
+    { status: "running", reason: "closed", sequence: 17 },
   ] as const)(
-    "recovers a lost question callback ($status/$reason) as one follow-up",
-    ({ status, reason }) => Effect.gen(function* () {
-      const harness = yield* Effect.promise(() => createHarness());
-      const now = "2026-01-01T00:00:00.000Z";
-      harness.respondToUserInput.mockImplementation(() =>
-        Effect.fail(
-          reason === "missing"
-            ? new ProviderSessionNotFoundError({ threadId: "thread-1" })
-            : reason === "closed"
-              ? new ProviderAdapterSessionClosedError({
-                  provider: "claudeAgent",
-                  threadId: "thread-1",
-                })
-              : new ProviderAdapterRequestError({
-                  provider: ProviderDriverKind.make("claudeAgent"),
-                  method: "item/tool/respondToUserInput",
-                  detail: "Unknown pending Codex user input request: user-input-request-1",
-                }),
-        ),
-      );
+    "recovers a lost question callback ($status/$reason/$sequence) as one follow-up",
+    ({ status, reason, sequence }) =>
+      Effect.gen(function* () {
+        const harness = yield* Effect.promise(() => createHarness());
+        const now = "2026-01-01T00:00:00.000Z";
+        harness.respondToUserInput.mockImplementation(() =>
+          Effect.fail(
+            reason === "missing"
+              ? new ProviderSessionNotFoundError({ threadId: "thread-1" })
+              : reason === "closed"
+                ? new ProviderAdapterSessionClosedError({
+                    provider: "claudeAgent",
+                    threadId: "thread-1",
+                  })
+                : new ProviderAdapterRequestError({
+                    provider: ProviderDriverKind.make("claudeAgent"),
+                    method: "item/tool/respondToUserInput",
+                    detail: "Unknown pending Codex user input request: user-input-request-1",
+                  }),
+          ),
+        );
 
-      yield* (
-        harness.engine.dispatch({
+        yield* harness.engine.dispatch({
           type: "thread.session.set",
           commandId: CommandId.make("cmd-session-set-for-user-input-error"),
           threadId: ThreadId.make("thread-1"),
@@ -3940,16 +3944,15 @@ describe("ProviderCommandReactor", () => {
             updatedAt: now,
           },
           createdAt: now,
-        }),
-      );
+        });
 
-      yield* (
-        harness.engine.dispatch({
+        yield* harness.engine.dispatch({
           type: "thread.activity.append",
           commandId: CommandId.make("cmd-user-input-requested"),
           threadId: ThreadId.make("thread-1"),
           activity: {
             id: EventId.make("activity-user-input-requested"),
+            ...(sequence !== undefined ? { sequence } : {}),
             tone: "info",
             kind: "user-input.requested",
             summary: "User input requested",
@@ -3973,11 +3976,9 @@ describe("ProviderCommandReactor", () => {
             createdAt: now,
           },
           createdAt: now,
-        }),
-      );
+        });
 
-      yield* (
-        harness.engine.dispatch({
+        yield* harness.engine.dispatch({
           type: "thread.user-input.respond",
           commandId: CommandId.make("cmd-user-input-respond-stale"),
           threadId: ThreadId.make("thread-1"),
@@ -3986,37 +3987,40 @@ describe("ProviderCommandReactor", () => {
             sandbox_mode: "workspace-write",
           },
           createdAt: now,
-        }),
-      );
+        });
 
-      yield* Effect.promise(() => harness.drain());
+        yield* Effect.promise(() => harness.drain());
 
-      const readModel = yield* Effect.promise(() => harness.readModel());
-      const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
-      expect(thread).toBeDefined();
+        const readModel = yield* Effect.promise(() => harness.readModel());
+        const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+        expect(thread).toBeDefined();
 
-      const failureActivity = thread?.activities.find(
-        (activity) => activity.kind === "provider.user-input.respond.failed",
-      );
-      expect(failureActivity).toBeUndefined();
+        const failureActivity = thread?.activities.find(
+          (activity) => activity.kind === "provider.user-input.respond.failed",
+        );
+        expect(failureActivity).toBeUndefined();
 
-      const resolvedActivity = thread?.activities.find(
-        (activity) =>
-          activity.kind === "user-input.resolved" &&
-          typeof activity.payload === "object" &&
-          activity.payload !== null &&
-          (activity.payload as Record<string, unknown>).requestId === "user-input-request-1",
-      );
-      expect(resolvedActivity).toBeDefined();
-      const answers = thread?.messages.filter(
-        (message) => message.role === "user" && message.text.includes("Which mode should be used?"),
-      );
-      expect(answers).toHaveLength(1);
-      expect(answers?.[0]?.text).toContain("workspace-write");
-      expect(harness.sendTurn).toHaveBeenCalledTimes(1);
+        const resolvedActivity = thread?.activities.find(
+          (activity) =>
+            activity.kind === "user-input.resolved" &&
+            typeof activity.payload === "object" &&
+            activity.payload !== null &&
+            (activity.payload as Record<string, unknown>).requestId === "user-input-request-1",
+        );
+        expect(resolvedActivity).toBeDefined();
+        const shell = yield* harness.snapshotQuery.getShellSnapshot();
+        expect(shell.threads.find((entry) => entry.id === "thread-1")?.hasPendingUserInput).toBe(
+          false,
+        );
+        const answers = thread?.messages.filter(
+          (message) =>
+            message.role === "user" && message.text.includes("Which mode should be used?"),
+        );
+        expect(answers).toHaveLength(1);
+        expect(answers?.[0]?.text).toContain("workspace-write");
+        expect(harness.sendTurn).toHaveBeenCalledTimes(1);
 
-      yield* (
-        harness.engine
+        const duplicate = yield* harness.engine
           .dispatch({
             type: "thread.user-input.respond",
             commandId: CommandId.make("cmd-user-input-repeat-after-recovery"),
@@ -4025,11 +4029,11 @@ describe("ProviderCommandReactor", () => {
             answers: { sandbox_mode: "workspace-write" },
             createdAt: now,
           })
-          .pipe(Effect.exit),
-      );
-      yield* Effect.promise(() => harness.drain());
-      expect(harness.sendTurn).toHaveBeenCalledTimes(1);
-    }),
+          .pipe(Effect.exit);
+        expect(duplicate._tag).toBe("Failure");
+        yield* Effect.promise(() => harness.drain());
+        expect(harness.sendTurn).toHaveBeenCalledTimes(1);
+      }),
   );
 
   effectIt.effect("stops a provider session without reading unrelated message bodies", () =>
