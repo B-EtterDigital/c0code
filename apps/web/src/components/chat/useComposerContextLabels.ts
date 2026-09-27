@@ -165,6 +165,21 @@ export function useComposerContextLabels(element: HTMLDivElement | null): boolea
       });
     };
     const resize = new ResizeObserver(schedule);
+    const root = document.documentElement;
+    // An already-loaded font can change scrollWidth inside a clipped label
+    // without resizing its box or emitting a font-loading event.
+    const readTypography = () =>
+      [
+        "--font-sans",
+        "--font-mono",
+        "--font-composer",
+        "font-size",
+        "--font-size-prompt",
+        "--font-size-code",
+      ]
+        .map((property) => root.style.getPropertyValue(property))
+        .join("\0");
+    let typography = readTypography();
     const observed = new Set<Element>();
     const observeLabels = () => {
       const next = new Set<Element>([
@@ -189,7 +204,14 @@ export function useComposerContextLabels(element: HTMLDivElement | null): boolea
     // Inner label sizes cover font changes while the outer label is clipped.
     const mutations = new MutationObserver((changes) => {
       if (changes.some((change) => change.type === "childList")) observeLabels();
-      schedule();
+      if (changes.some((change) => change.target !== root)) schedule();
+      if (changes.some((change) => change.target === root)) {
+        const next = readTypography();
+        if (next !== typography) {
+          typography = next;
+          schedule();
+        }
+      }
     });
     observeLabels();
     mutations.observe(element, {
@@ -198,6 +220,7 @@ export function useComposerContextLabels(element: HTMLDivElement | null): boolea
       characterData: true,
       attributes: true,
     });
+    mutations.observe(root, { attributes: true, attributeFilter: ["style"] });
     document.fonts.addEventListener("loadingdone", schedule);
     measure();
     return () => {

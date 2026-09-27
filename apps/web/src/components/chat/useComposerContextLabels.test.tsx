@@ -11,6 +11,8 @@ let widthReads: number;
 let compact: boolean;
 let fonts: EventTarget;
 let strip: MeasuredElement;
+let rootStyle: Map<string, string>;
+let documentRoot: HTMLElement;
 const observers: { resize?: ResizeProbe; mutations?: MutationProbe } = {};
 let frameId: number;
 let frames: Map<number, FrameRequestCallback>;
@@ -67,13 +69,18 @@ class ResizeProbe {
 }
 
 class MutationProbe {
+  nodes = new Set<Node>();
   disconnect = vi.fn();
   constructor(readonly callback: MutationCallback) {
     observers.mutations = this;
   }
-  observe() {}
-  notify(type: MutationRecordType = "characterData") {
-    this.callback([{ type } as MutationRecord], this as unknown as MutationObserver);
+  observe(node: Node) {
+    this.nodes.add(node);
+  }
+  notify(type: MutationRecordType = "characterData", target = strip as unknown as Node) {
+    if (this.nodes.has(target)) {
+      this.callback([{ type, target } as MutationRecord], this as unknown as MutationObserver);
+    }
   }
 }
 
@@ -104,11 +111,21 @@ beforeEach(() => {
   frameId = 0;
   frames = new Map();
   fonts = new EventTarget();
+  rootStyle = new Map();
+  documentRoot = {
+    style: { getPropertyValue: (name: string) => rootStyle.get(name) ?? "" },
+  } as unknown as HTMLElement;
   strip = new MeasuredElement("strip");
   const group = new MeasuredElement("group");
   group.children = [new MeasuredElement("control")];
   strip.children = [group];
-  const document = { nodeType: 9, fonts, addEventListener() {}, removeEventListener() {} };
+  const document = {
+    nodeType: 9,
+    documentElement: documentRoot,
+    fonts,
+    addEventListener() {},
+    removeEventListener() {},
+  };
   const container = {
     nodeType: 1,
     tagName: "DIV",
@@ -202,5 +219,24 @@ describe("composer context label layout", () => {
     fonts.dispatchEvent(new Event("loadingdone"));
     await flushFrame();
     expect(widthReads).toBe(measured);
+  });
+
+  it("remeasures an already-loaded font change in clipped labels, but ignores unrelated root styles", async () => {
+    available = 100;
+    await render();
+    expect(compact).toBe(true);
+    const measured = widthReads;
+    rootStyle.set("--accent-color", "cyan");
+    observers.mutations!.notify("attributes", documentRoot);
+    await flushFrame();
+    expect(widthReads).toBe(measured);
+    // Box widths and font-loading state stay unchanged; only intrinsic text
+    // width changes when a narrower installed font is selected.
+    natural = 50;
+    rootStyle.set("--font-sans", "monospace");
+    observers.mutations!.notify("attributes", documentRoot);
+    await flushFrame();
+    expect(compact).toBe(false);
+    expect(widthReads).toBe(measured + 1);
   });
 });
