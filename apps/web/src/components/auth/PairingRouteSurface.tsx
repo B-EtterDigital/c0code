@@ -3,6 +3,11 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import React, { startTransition, useEffect, useRef, useState, useCallback } from "react";
 
 import { APP_DISPLAY_NAME } from "../../branding";
+import {
+  registerC0xPairingState,
+  runC0xPairingExchange,
+  type C0xPairingState,
+} from "../../c0x/pairingState";
 import { connectPairing } from "../../connection/onboarding";
 import {
   peekPairingTokenFromUrl,
@@ -52,15 +57,19 @@ export function PairingRouteSurface({
   const [errorMessage, setErrorMessage] = useState(initialErrorMessage ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const autoSubmitAttemptedRef = useRef(false);
+  const [pairingState] = useState<C0xPairingState>(() => ({ version: 1, phase: "idle" }));
+  useEffect(() => registerC0xPairingState(pairingState), [pairingState]);
 
   const submitCredential = useCallback(
     async (nextCredential: string) => {
       setIsSubmitting(true);
       setErrorMessage("");
 
-      const submitError = await submitServerAuthCredential(nextCredential).then(
-        () => null,
-        (error) => errorMessageFromUnknown(error),
+      const submitError = await runC0xPairingExchange(pairingState, () =>
+        submitServerAuthCredential(nextCredential).then(
+          () => null,
+          (error) => errorMessageFromUnknown(error),
+        ),
       );
 
       setIsSubmitting(false);
@@ -74,7 +83,7 @@ export function PairingRouteSurface({
         onAuthenticated();
       });
     },
-    [onAuthenticated],
+    [onAuthenticated, pairingState],
   );
 
   const handleSubmit = useCallback(

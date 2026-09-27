@@ -1,3 +1,4 @@
+import { useC0xSidebarCatalog } from "../c0x/sidebarCatalog";
 import {
   C0xSidebarFolder,
   groupC0xSidebarRows,
@@ -2038,6 +2039,7 @@ export default function Sidebar() {
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
+  useC0xSidebarCatalog(threads, projects);
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
