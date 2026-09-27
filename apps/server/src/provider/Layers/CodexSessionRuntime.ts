@@ -18,6 +18,7 @@ import {
   TurnId,
 } from "@t3tools/contracts";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import { applyProviderProcessPriority } from "../providerProcessPriority.ts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -1235,6 +1236,7 @@ export const makeCodexSessionRuntime = (
         ),
       );
 
+    yield* applyProviderProcessPriority(Number(child.pid));
     const clientContext = yield* CodexClient.layerChildProcess(child).pipe(
       Layer.build,
       Effect.provideService(Scope.Scope, runtimeScope),

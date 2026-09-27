@@ -55,6 +55,7 @@ import {
 } from "../../serverSettings.ts";
 import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
 import { GitWorkflowService } from "../../git/GitWorkflowService.ts";
+import { recoverUserInputResponse } from "../recoverUserInputResponse.ts";
 const isProviderAdapterRequestError = Schema.is(ProviderAdapterRequestError);
 const isProviderAdapterValidationError = Schema.is(ProviderAdapterValidationError);
 const isProviderWorkspaceMissingError = Schema.is(ProviderWorkspaceMissingError);
@@ -268,7 +269,17 @@ function isUnknownPendingApprovalRequestError(cause: Cause.Cause<ProviderService
   );
 }
 
-function isUnknownPendingUserInputRequestError(cause: Cause.Cause<ProviderServiceError>): boolean {
+function isLostUserInputCallback(cause: Cause.Cause<ProviderServiceError>): boolean {
+  if (
+    cause.reasons.some(
+      (reason) =>
+        Cause.isFailReason(reason) &&
+        (reason.error._tag === "ProviderSessionNotFoundError" ||
+          reason.error._tag === "ProviderAdapterSessionNotFoundError" ||
+          reason.error._tag === "ProviderAdapterSessionClosedError"),
+    )
+  )
+    return true;
   const error = findProviderAdapterRequestError(cause);
   if (error) {
     const detail = error.detail.toLowerCase();
@@ -1593,6 +1604,14 @@ const make = Effect.gen(function* () {
       }
       const hasSession = thread.session && thread.session.status !== "stopped";
       if (!hasSession) {
+        if (
+          yield* recoverUserInputResponse(
+            event.payload,
+            projectionSnapshotQuery,
+            orchestrationEngine,
+          )
+        )
+          return;
         return yield* appendProviderFailureActivity({
           threadId: event.payload.threadId,
           kind: "provider.user-input.respond.failed",
@@ -1615,16 +1634,27 @@ const make = Effect.gen(function* () {
         })
         .pipe(
           Effect.catchCause((cause) =>
-            appendProviderFailureActivity({
-              threadId: event.payload.threadId,
-              kind: "provider.user-input.respond.failed",
-              summary: "Provider user input response failed",
-              detail: isUnknownPendingUserInputRequestError(cause)
-                ? stalePendingRequestDetail("user-input", event.payload.requestId)
-                : Cause.pretty(cause),
-              turnId: null,
-              createdAt: event.payload.createdAt,
-              requestId: event.payload.requestId,
+            Effect.gen(function* () {
+              if (
+                isLostUserInputCallback(cause) &&
+                (yield* recoverUserInputResponse(
+                  event.payload,
+                  projectionSnapshotQuery,
+                  orchestrationEngine,
+                ))
+              )
+                return;
+              return yield* appendProviderFailureActivity({
+                threadId: event.payload.threadId,
+                kind: "provider.user-input.respond.failed",
+                summary: "Provider user input response failed",
+                detail: isLostUserInputCallback(cause)
+                  ? stalePendingRequestDetail("user-input", event.payload.requestId)
+                  : Cause.pretty(cause),
+                turnId: null,
+                createdAt: event.payload.createdAt,
+                requestId: event.payload.requestId,
+              });
             }),
           ),
         );

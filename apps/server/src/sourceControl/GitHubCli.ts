@@ -15,6 +15,10 @@ import {
 
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import {
+  githubAuthenticationScope,
+  makeGitHubAuthenticationBackoff,
+} from "./githubAuthenticationBackoff.ts";
+import {
   decodeGitHubPullRequestJson,
   decodeGitHubPullRequestListJson,
   type NormalizedGitHubPullRequestRecord,
@@ -233,6 +237,7 @@ export class GitHubCli extends Context.Service<
   {
     readonly execute: (input: {
       readonly cwd: string;
+      readonly authenticationHost?: string;
       readonly args: ReadonlyArray<string>;
       readonly timeoutMs?: number;
       /** Piped to the child's stdin, for payloads that must never appear in argv. */
@@ -242,6 +247,7 @@ export class GitHubCli extends Context.Service<
 
     readonly listOpenPullRequests: (input: {
       readonly cwd: string;
+      readonly authenticationHost?: string;
       readonly headSelector: string;
       readonly limit?: number;
     }) => Effect.Effect<ReadonlyArray<GitHubPullRequestSummary>, GitHubCliError>;
@@ -341,25 +347,33 @@ function deriveRepositoryCloneUrlsFromCreateOutput(
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const process = yield* VcsProcess.VcsProcess;
+  const authentication = makeGitHubAuthenticationBackoff<GitHubCliError>(
+    (error) => error._tag === "GitHubCliAuthenticationError",
+  );
 
   const execute: GitHubCli["Service"]["execute"] = (input) =>
-    process
-      .run({
-        operation: "GitHubCli.execute",
-        command: "gh",
-        args: input.args,
-        cwd: input.cwd,
-        timeoutMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
-        ...(input.maxOutputBytes !== undefined ? { maxOutputBytes: input.maxOutputBytes } : {}),
-      })
-      .pipe(Effect.mapError((error) => fromVcsError({ command: "gh", cwd: input.cwd }, error)));
+    authentication.protect(
+      githubAuthenticationScope(input),
+      process
+        .run({
+          operation: "GitHubCli.execute",
+          command: "gh",
+          args: input.args,
+          cwd: input.cwd,
+          timeoutMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+          ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
+          ...(input.maxOutputBytes !== undefined ? { maxOutputBytes: input.maxOutputBytes } : {}),
+        })
+        .pipe(Effect.mapError((error) => fromVcsError({ command: "gh", cwd: input.cwd }, error))),
+      input.args[0] === "auth",
+    );
 
   return GitHubCli.of({
     execute,
     listOpenPullRequests: (input) =>
       execute({
         cwd: input.cwd,
+        ...(input.authenticationHost ? { authenticationHost: input.authenticationHost } : {}),
         args: [
           "pr",
           "list",

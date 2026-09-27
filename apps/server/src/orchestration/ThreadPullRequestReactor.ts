@@ -12,6 +12,7 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -20,6 +21,7 @@ import * as GitManager from "../git/GitManager.ts";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import { forkParked } from "../serverActivation.ts";
+import { isGitHubAuthenticationFailure } from "../sourceControl/githubAuthenticationBackoff.ts";
 import * as OrchestrationEngine from "./Services/OrchestrationEngine.ts";
 import * as ProjectionSnapshotQuery from "./Services/ProjectionSnapshotQuery.ts";
 
@@ -30,6 +32,20 @@ export class ThreadPullRequestReactor extends Context.Service<
     readonly drain: Effect.Effect<void>;
   }
 >()("t3/orchestration/ThreadPullRequestReactor") {}
+
+function logRefreshFailure(
+  cause: Cause.Cause<unknown>,
+  message: string,
+  details: Record<string, unknown>,
+) {
+  const error = Cause.findErrorOption(cause);
+  // Authentication has one host-level warning; repeated polls remain diagnostic breadcrumbs.
+  const log =
+    Option.isSome(error) && isGitHubAuthenticationFailure(error.value)
+      ? Effect.logDebug
+      : Effect.logWarning;
+  return log(message, { ...details, cause: Cause.pretty(cause) });
+}
 
 function samePullRequest(
   left: ThreadLinkedPullRequest | null | undefined,
@@ -214,7 +230,7 @@ export const make = Effect.gen(function* () {
               Effect.catchCause((cause) =>
                 Cause.hasInterruptsOnly(cause)
                   ? Effect.failCause(cause)
-                  : Effect.logWarning("thread pull request discovery failed", {
+                  : logRefreshFailure(cause, "thread pull request discovery failed", {
                       threadId: thread.id,
                       cause: Cause.pretty(cause),
                     }).pipe(
@@ -280,7 +296,7 @@ export const make = Effect.gen(function* () {
                 Effect.catchCause((cause) =>
                   Cause.hasInterruptsOnly(cause)
                     ? Effect.failCause(cause)
-                    : Effect.logWarning("thread pull request update failed", {
+                    : logRefreshFailure(cause, "thread pull request update failed", {
                         threadId: thread.id,
                         cause: Cause.pretty(cause),
                       }).pipe(Effect.tap(() => Effect.sync(() => failBackfill([thread])))),
@@ -292,7 +308,7 @@ export const make = Effect.gen(function* () {
           Effect.catchCause((cause) =>
             Cause.hasInterruptsOnly(cause)
               ? Effect.failCause(cause)
-              : Effect.logWarning("thread branch pull request lookup failed", {
+              : logRefreshFailure(cause, "thread branch pull request lookup failed", {
                   threadIds: group.map((thread) => thread.id),
                   cause: Cause.pretty(cause),
                 }).pipe(Effect.tap(() => Effect.sync(() => failBackfill(group)))),
@@ -307,7 +323,7 @@ export const make = Effect.gen(function* () {
       Effect.catchCause((cause) =>
         Cause.hasInterruptsOnly(cause)
           ? Effect.failCause(cause)
-          : Effect.logWarning("thread pull request refresh failed", {
+          : logRefreshFailure(cause, "thread pull request refresh failed", {
               cause: Cause.pretty(cause),
             }),
       ),

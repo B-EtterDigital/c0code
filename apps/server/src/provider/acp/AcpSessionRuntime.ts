@@ -21,6 +21,7 @@ import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/schema";
 import type * as EffectAcpProtocol from "effect-acp/protocol";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import { applyProviderProcessPriority } from "../providerProcessPriority.ts";
 
 import {
   collectSessionConfigOptionValues,
@@ -449,6 +450,7 @@ export const make = (
         ),
       );
 
+    yield* applyProviderProcessPriority(Number(child.pid));
     yield* child.stderr.pipe(
       Stream.decodeText(),
       Stream.runForEach((chunk) =>

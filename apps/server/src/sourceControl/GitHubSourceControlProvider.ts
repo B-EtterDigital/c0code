@@ -119,6 +119,7 @@ export const make = Effect.gen(function* () {
         return github
           .listOpenPullRequests({
             cwd: input.cwd,
+            ...(input.context ? { authenticationHost: input.context.provider.baseUrl } : {}),
             headSelector: input.headSelector,
             ...(input.limit !== undefined ? { limit: input.limit } : {}),
           })
@@ -145,6 +146,7 @@ export const make = Effect.gen(function* () {
       return github
         .execute({
           cwd: input.cwd,
+          ...(input.context ? { authenticationHost: input.context.provider.baseUrl } : {}),
           args: [
             "pr",
             "list",

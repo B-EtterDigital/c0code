@@ -60,6 +60,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import type { GitManagerServiceError } from "@t3tools/contracts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
+import { isGitHubAuthenticationFailure } from "../sourceControl/githubAuthenticationBackoff.ts";
 import { detectPrTemplate } from "../sourceControl/PrTemplateDetection.ts";
 import type { ChangeRequest } from "@t3tools/contracts";
 
@@ -1175,7 +1176,9 @@ export const make = Effect.gen(function* () {
       ),
       Effect.map(({ pr }) => pr),
       Effect.catch((error) =>
-        Effect.logWarning("PR lookup failed; keeping last known PR state.").pipe(
+        (isGitHubAuthenticationFailure(error) ? Effect.logDebug : Effect.logWarning)(
+          "PR lookup failed; keeping last known PR state.",
+        ).pipe(
           Effect.annotateLogs({
             operation: "lookupStatusPr",
             branch: details.branch,
